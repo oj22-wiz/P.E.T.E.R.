@@ -1,0 +1,54 @@
+# P.E.T.E.R. — Render Blueprint
+# One web service that serves the PWA + API + runs the Peter worker.
+# Deploy: push this repo to GitHub, then in Render click
+#   "New -> Blueprint" and point it at this repo (it auto-reads render.yaml).
+#
+# After deploy, set the two Spotify variables exactly as shown below
+# (replace YOUR-APP with your actual *.onrender.com URL) and re-register the
+# redirect URI in the Spotify dashboard.
+
+services:
+  - type: web
+    name: peter
+    runtime: docker
+    plan: free
+    region: oregon
+    rootDir: .
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      # LiveKit (same keys as your local .env)
+      - key: LIVEKIT_URL
+        value: wss://project-p-e-t-e-r-b7e84u03.livekit.cloud
+      - key: LIVEKIT_API_KEY
+        sync: false            # set in the Render dashboard (secret)
+      - key: LIVEKIT_API_SECRET
+        sync: false
+      # Google AI / Gemini Realtime (required for speech)
+      - key: GOOGLE_API_KEY
+        sync: false
+      # Agent name (must match your LiveKit agent deployment)
+      - key: AGENT_ID
+        value: peter-assistant
+      # Spotify (set client id/secret as secrets in the dashboard)
+      - key: SPOTIFY_CLIENT_ID
+        sync: false
+      - key: SPOTIFY_CLIENT_SECRET
+        sync: false
+      # CRITICAL: Spotify only allows exact registered redirect URIs.
+      # Replace YOUR-APP with your app's real URL, e.g.
+      #   https://peter.onrender.com/spotify/callback
+      # then add the SAME URI in the Spotify dashboard for this Client ID.
+      - key: SPOTIFY_REDIRECT_URI
+        value: https://YOUR-APP.onrender.com/spotify/callback
+      # Optional: used only to build links in messages.
+      - key: PUBLIC_URL
+        value: https://YOUR-APP.onrender.com
+      # Optional: set MEM0_API_KEY for persistent cloud memory across
+      # redeploys (local ./memory_store is ephemeral on free Render).
+      - key: MEM0_API_KEY
+        sync: false
+      # Render injects PORT=10000 automatically; the backend reads it below.
+      - key: PORT
+        value: 10000

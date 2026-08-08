@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="P.E.T.E.R" />
+<meta name="theme-color" content="#000000" />
+<link rel="manifest" href="manifest.json" />
+<title>P.E.T.E.R.</title>
+<style>
+  :root {
+    --red:#e62429; --blue:#3d7bfd; --green:#2ecc71;
+    --txt:#ffffff; --dim:#b8c4e0; --panel:rgba(20,28,52,.92);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body {
+    background:#000 !important; color:var(--txt);
+    font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    height:100%; overflow:hidden; user-select:none;
+  }
+  body {
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+    gap:14px;
+  }
+  .status { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--dim);
+    background:rgba(10,16,34,.55); border:1px solid rgba(255,255,255,.08);
+    padding:5px 12px; border-radius:999px; letter-spacing:.3px; }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--dim); transition:background .3s, box-shadow .3s; }
+  .dot.online { background:var(--green); box-shadow:0 0 6px var(--green); }
+  .dot.talking { background:var(--blue); box-shadow:0 0 8px var(--blue); animation:blink 1.2s infinite; }
+  .dot.speaking { background:var(--red); box-shadow:0 0 10px var(--red); animation:blink .8s infinite; }
+  @keyframes blink { 50% { opacity:.4; } }
+
+  .url-slot { display:flex; gap:6px; width:100%; max-width:340px; }
+  .url-slot input { flex:1; min-width:0; padding:10px 14px; border-radius:999px; border:1px solid rgba(255,255,255,.35);
+    outline:none; background:var(--panel); color:var(--txt); font-size:14px; }
+  .url-slot input:focus { border-color:var(--blue); }
+  .url-clear { flex:none; width:38px; height:38px; border-radius:999px; border:1px solid rgba(255,255,255,.35);
+    background:var(--panel); color:#fff; font-size:16px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+
+  .spotify-btn { width:100%; max-width:340px; cursor:pointer; padding:11px 14px; border-radius:999px;
+    border:1px solid rgba(255,255,255,.35); background:rgba(20,28,52,.92); color:#fff; font-size:14px;
+    display:flex; align-items:center; justify-content:center; gap:8px; }
+  .spotify-btn.authorized { border-color:var(--green); }
+  .spotify-panel { width:100%; max-width:340px; background:rgba(14,20,38,.97); border:1px solid rgba(255,255,255,.15);
+    border-radius:14px; padding:12px; display:none; flex-direction:column; gap:8px; }
+  .spotify-panel.open { display:flex; }
+  .spotify-head { font-size:12px; color:var(--dim); line-height:1.4; }
+  .spotify-panel select { width:100%; padding:9px; border-radius:10px; font-size:13px; border:1px solid rgba(255,255,255,.25);
+    background:#0a1128; color:#fff; outline:none; }
+  .spotify-set { margin-top:2px; padding:9px; border-radius:10px; border:1px solid rgba(46,204,113,.5);
+    background:rgba(46,204,113,.15); color:#fff; font-size:13px; cursor:pointer; }
+  .spotify-note { font-size:11px; color:var(--dim); line-height:1.4; }
+  .spotify-note a { color:var(--green); }
+
+  /* Files slot (upload a file for Peter from the phone) */
+  .files-slot { width:100%; max-width:340px; display:flex; flex-direction:column; gap:6px; }
+  .drop-zone { width:100%; min-height:64px; padding:10px 12px; border-radius:14px;
+    border:1.5px dashed rgba(255,255,255,.28); background:rgba(20,28,52,.5);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; cursor:pointer; gap:3px; transition:border-color .2s, background .2s, box-shadow .2s; }
+  .drop-zone.over { border-color:var(--green); background:rgba(46,204,113,.12); box-shadow:0 0 16px rgba(46,204,113,.4); }
+  .dz-ic { font-size:20px; line-height:1; }
+  .dz-title { font-size:11px; font-weight:600; color:#fff; }
+  .dz-sub { font-size:9px; color:var(--dim); line-height:1.3; }
+  .dz-progress { display:none; margin-top:2px; width:100%; height:4px; border-radius:999px; background:rgba(255,255,255,.12); overflow:hidden; }
+  .dz-progress i { display:block; height:100%; width:0; background:var(--blue); border-radius:999px; transition:width .2s; }
+  .files-active { width:100%; min-height:54px; border-radius:14px; border:1px solid var(--line, rgba(255,255,255,.15));
+    background:rgba(20,28,52,.6); padding:8px 12px; display:none; align-items:center; gap:10px; }
+  .files-active.show { display:flex; }
+  .file-chip { flex:none; width:32px; height:32px; border-radius:11px; background:linear-gradient(140deg, rgba(61,123,253,.32), rgba(230,36,41,.28)); border:1px solid rgba(255,255,255,.18); display:flex; align-items:center; justify-content:center; font-size:16px; }
+  .file-meta { flex:1; min-width:0; }
+  .file-name { font-size:11px; font-weight:600; color:#fff; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; }
+  .file-label { font-size:8.5px; color:var(--dim); margin-top:2px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; }
+  .file-pick { flex:none; cursor:pointer; padding:6px 10px; border-radius:999px; border:1px solid rgba(255,255,255,.2); background:rgba(20,28,52,.8); color:#fff; font-size:9px; font-weight:600; }
+  .files-panel { width:100%; background:rgba(14,20,38,.97); border:1px solid rgba(255,255,255,.15); border-radius:14px; padding:10px; display:none; flex-direction:column; gap:8px; }
+  .files-panel.open { display:flex; }
+  .files-panel select { width:100%; padding:9px; border-radius:10px; font-size:13px; border:1px solid rgba(255,255,255,.25); background:#0a1128; color:#fff; outline:none; }
+  .files-head { font-size:11px; color:var(--dim); line-height:1.4; }
+
+  /* Chat transcript */
+  .chat { width:100%; max-width:340px; display:flex; flex-direction:column; background:rgba(20,28,52,.55);
+    border:1px solid rgba(255,255,255,.15); border-radius:14px; overflow:hidden; }
+  .chat-log { height:120px; overflow-y:auto; padding:10px; display:flex; flex-direction:column; gap:6px; scroll-behavior:smooth; }
+  .chat-log::-webkit-scrollbar { width:5px; } .chat-log::-webkit-scrollbar-thumb { background:rgba(255,255,255,.18); border-radius:999px; }
+  .chat-empty { font-size:11px; color:var(--dim); text-align:center; margin:auto; }
+  .msg { display:flex; flex-direction:column; max-width:92%; }
+  .msg.peter { align-self:flex-start; align-items:flex-start; }
+  .msg .who { font-size:8px; color:var(--dim); letter-spacing:.4px; margin-bottom:1px; }
+  .msg .bubble { padding:6px 8px; border-radius:11px; font-size:11px; line-height:1.4; word-break:break-word; white-space:pre-wrap; }
+  .msg.peter .bubble { background:rgba(230,36,41,.16); border:1px solid rgba(230,36,41,.3); }
+  .msg.peter a { color:var(--blue); text-decoration:underline; }
+
+  .orb-wrap { position:relative; width:150px; height:150px; cursor:pointer; }
+  .halo { position:absolute; inset:6px; border-radius:50%; z-index:0;
+    background:radial-gradient(circle, rgba(61,123,253,.45) 0%, rgba(230,36,41,.28) 55%, transparent 72%);
+    filter:blur(8px); animation:halo-breathe 3.2s ease-in-out infinite; }
+  @keyframes halo-breathe { 0%,100%{transform:scale(.92);opacity:.65;} 50%{transform:scale(1.08);opacity:1;} }
+  .orb { position:relative; width:120px; height:120px; margin:15px auto 0; border-radius:50%; z-index:1;
+    background:radial-gradient(circle at 32% 26%, rgba(255,255,255,.28) 0%, transparent 42%),
+      radial-gradient(circle at 50% 55%, #12204a 0%, #0a1128 70%);
+    border:2px solid rgba(255,255,255,.16); box-shadow:0 8px 26px rgba(0,0,0,.55), 0 0 24px rgba(61,123,253,.35);
+    display:flex; align-items:center; justify-content:center; transition:box-shadow .3s, border-color .3s, transform .15s; }
+  .orb:active { transform:scale(.96); }
+  .orb .mask { position:absolute; width:64px; height:54px; border-radius:50%;
+    background:radial-gradient(circle at 40% 34%, #d43a3f 0%, var(--red) 58%, #a8181d 100%);
+    border:2px solid rgba(0,0,0,.5); box-shadow:inset 0 -3px 7px rgba(0,0,0,.4), 0 0 10px rgba(230,36,41,.4); }
+  .orb .eye { position:absolute; width:19px; height:14px; background:#fff; border-radius:50%;
+    top:49px; box-shadow:inset 0 -2px 3px rgba(0,0,0,.35); transition:transform .2s, height .2s; }
+  .orb .eye.l { left:50px; } .orb .eye.r { right:50px; }
+  .orb-wrap.listening .orb { border-color:rgba(61,123,253,.65); animation:listen-pulse 1.2s ease-in-out infinite; }
+  .orb-wrap.speaking .orb { border-color:rgba(230,36,41,.7); animation:speaking-glow 1.1s ease-in-out infinite; }
+  @keyframes listen-pulse { 0%,100%{box-shadow:0 8px 30px rgba(0,0,0,.6),0 0 24px rgba(61,123,253,.5);} 50%{box-shadow:0 8px 34px rgba(0,0,0,.65),0 0 42px rgba(61,123,253,.9);} }
+  @keyframes speaking-glow { 0%,100%{box-shadow:0 8px 30px rgba(0,0,0,.6),0 0 22px rgba(230,36,41,.55);transform:scale(1);} 50%{box-shadow:0 8px 34px rgba(0,0,0,.65),0 0 44px rgba(230,36,41,.95);transform:scale(1.06);} }
+  .orb-wrap.interacting .orb .eye { transform:scaleY(.45); }
+  .tap-hint { position:absolute; left:50%; transform:translateX(-50%); bottom:-4px; font-size:12px; color:var(--dim);
+    letter-spacing:.5px; white-space:nowrap; }
+</style>
+</head>
+<body>
+
+<div class="status"><div class="dot" id="statusDot"></div><span class="txt" id="statusText">Ready</span></div>
+
+<div class="url-slot">
+  <input id="urlInput" type="url" placeholder="Paste a URL…" autocomplete="off" spellcheck="false" />
+  <button class="url-clear" id="urlClear" title="Clear URL">✕</button>
+</div>
+
+<div class="spotify-btn" id="spotifyBtn">🎧 <span id="spotifyLabel">Spotify</span></div>
+<div class="spotify-panel" id="spotifyPanel">
+  <div class="spotify-head" id="spotifyHead">Loading…</div>
+  <select id="spotifyPlaylist" style="display:none"></select>
+  <button class="spotify-set" id="spotifySet" style="display:none">Set default →</button>
+  <div class="spotify-note" id="spotifyNote"></div>
+</div>
+
+<!-- Files: upload a file for Peter from the phone -->
+<div class="files-slot">
+  <div class="drop-zone" id="dropZone" title="Tap to choose a file for Peter">
+    <div class="dz-ic">📁</div>
+    <div class="dz-title">Tap to add a file for Peter</div>
+    <div class="dz-sub">becomes the active file he can read</div>
+    <div class="dz-progress" id="dzProgress"><i></i></div>
+    <input type="file" id="fileInput" style="display:none" />
+  </div>
+  <div class="files-active" id="filesActive">
+    <div class="file-chip">📄</div>
+    <div class="file-meta">
+      <div class="file-name" id="activeFileName">No file</div>
+      <div class="file-label" id="activeFileLabel">No active file selected</div>
+    </div>
+    <div class="file-pick" id="filePick">Select</div>
+  </div>
+  <div class="files-panel" id="filesPanel">
+    <div class="files-head" id="filesHead">Loading…</div>
+    <select id="filesList" style="display:none"></select>
+    <button class="spotify-set" id="filesSet" style="display:none">Set active →</button>
+  </div>
+</div>
+
+<!-- Chat transcript -->
+<div class="chat" id="chat">
+  <div class="chat-log" id="chatLog"><div class="chat-empty" id="chatEmpty">Peter's replies appear here.</div></div>
+</div>
+
+<div class="orb-wrap" id="orbWrap" title="Tap to talk to Peter">
+  <div class="halo"></div>
+  <div class="orb" id="orb">
+    <div class="mask"></div>
+    <div class="eye l"></div>
+    <div class="eye r"></div>
+  </div>
+  <div class="tap-hint" id="tapHint">Tap to talk</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const statusDot = $('statusDot'), statusText = $('statusText');
+const orbWrap = $('orbWrap');
+
+let room = null, micTrack = null, audioEl = null, audioCtx = null;
+let liveKitToken = null, liveKitUrl = null, active = false;
+
+function setStatus(kind, text) {
+  statusDot.className = 'dot' + (kind ? ' ' + kind : '');
+  statusText.textContent = text;
+}
+function setOrbState(state) {
+  orbWrap.classList.remove('speaking', 'listening', 'interacting');
+  if (state === 'speaking') orbWrap.classList.add('speaking');
+  else if (state === 'listening') orbWrap.classList.add('listening');
+  else if (state === 'interacting') orbWrap.classList.add('interacting');
+}
+
+async function loadConnectionInfo() {
+  try {
+    const r = await fetch('/connection');
+    const info = await r.json();
+    liveKitUrl = info.url; liveKitToken = info.token;
+    return true;
+  } catch (e) { console.error(e); setStatus('', 'Backend offline'); return false; }
+}
+
+async function toggleCall() {
+  if (active) { await endCall(); return; }
+  if (!liveKitToken && !(await loadConnectionInfo())) return;
+  setOrbState('interacting'); $('tapHint').textContent = 'Connecting…';
+  try {
+    room = new LivekitClient.Room();
+    room.on(LivekitClient.RoomEvent.TrackSubscribed, onTrackSubscribed);
+    room.on(LivekitClient.RoomEvent.DataReceived, handleDataReceived);
+    room.on(LivekitClient.RoomEvent.MediaDevicesError, (e) => console.error('media error', e));
+    await room.connect(liveKitUrl, liveKitToken, { autoSubscribe: true });
+    micTrack = await LivekitClient.createLocalAudioTrack();
+    await room.localParticipant.publishTrack(micTrack);
+    setStatus('talking', 'Listening…');
+    await waitForAgent(60000);
+    setStatus('talking', 'Peter is listening');
+    active = true; setOrbState('listening'); $('tapHint').textContent = 'Tap to end';
+  } catch (e) {
+    console.error(e); setStatus('', 'Could not reach Peter'); $('tapHint').textContent = 'Tap to talk';
+    setOrbState(null); await cleanupRoom();
+  }
+}
+
+function onTrackSubscribed(track, publication, participant) {
+  if (track.kind !== 'audio') return;
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = audioCtx.createMediaStreamSource(new MediaStream([track.mediaStreamTrack]));
+    src.connect(audioCtx.destination);
+    if (!audioEl) { audioEl = track.attach(); audioEl.autoplay = true; document.body.appendChild(audioEl); }
+    setOrbState('speaking');
+    track.on(LivekitClient.TrackEvent.Ended, () => { if (active) setOrbState('listening'); });
+  } catch (e) { console.error('failed to play agent audio', e); }
+}
+
+function waitForAgent(timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const t0 = Date.now();
+    const timer = setInterval(() => {
+      const hasAgent = room && room.remoteParticipants.size > 0;
+      if (hasAgent) {
+        clearInterval(timer);
+        room.remoteParticipants.forEach((p) =>
+          p.trackPublications.forEach((pub) => {
+            if (pub.kind === 'audio' && pub.track && !pub.track.isSubscribed) pub.setSubscribed(true);
+          }));
+        resolve();
+      } else if (Date.now() - t0 > timeoutMs) {
+        clearInterval(timer); reject(new Error('timeout waiting for Peter'));
+      }
+    }, 400);
+  });
+}
+
+async function cleanupRoom() {
+  try {
+    if (micTrack) { micTrack.stop(); micTrack = null; }
+    if (audioEl) { audioEl.remove(); audioEl = null; }
+    if (room) { await room.disconnect(); room = null; }
+  } catch (e) { console.error(e); }
+}
+async function endCall() {
+  await cleanupRoom(); active = false; setOrbState(null);
+  $('tapHint').textContent = 'Tap to talk'; setStatus('online', 'Tap to talk');
+}
+
+/* URL slot */
+const urlInput = $('urlInput'), urlClear = $('urlClear');
+let urlSaveTimer = null;
+function saveUrl() {
+  clearTimeout(urlSaveTimer);
+  urlSaveTimer = setTimeout(async () => {
+    try { await fetch('/pending', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ url: urlInput.value.trim() }) }); }
+    catch (e) { console.error('failed to save URL', e); }
+  }, 300);
+}
+async function loadUrl() {
+  try { const r = await (await fetch('/pending')).json(); if (r && r.url) urlInput.value = r.url; }
+  catch (e) { console.error('failed to load URL', e); }
+}
+urlInput.addEventListener('input', saveUrl);
+urlClear.addEventListener('click', async () => {
+  urlInput.value = '';
+  try { await fetch('/pending', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ url: '' }) }); } catch (e) { console.error(e); }
+});
+orbWrap.addEventListener('click', toggleCall);
+
+/* Spotify */
+const spotifyBtn = $('spotifyBtn'), spotifyLabel = $('spotifyLabel');
+const spotifyPanel = $('spotifyPanel'), spotifyHead = $('spotifyHead');
+const spotifyPlaylist = $('spotifyPlaylist'), spotifySet = $('spotifySet'), spotifyNote = $('spotifyNote');
+
+async function loadSpotify() {
+  try {
+    const s = await (await fetch('/spotify')).json();
+    if (s && s.authorized) {
+      spotifyBtn.classList.add('authorized');
+      spotifyLabel.textContent = (s.default && s.default.name) ? s.default.name : 'Linked ✓';
+    } else {
+      spotifyBtn.classList.remove('authorized');
+      spotifyLabel.textContent = 'Link Spotify';
+      spotifyHead.textContent = s && s.client_id_set ? 'Authorize Spotify to link your account.' : 'Spotify not configured.';
+    }
+  } catch (e) { console.error('loadSpotify', e); }
+}
+
+spotifyBtn.addEventListener('click', async (e) => {
+  e.stopPropagation();
+  const isOpen = spotifyPanel.classList.toggle('open');
+  if (isOpen) await openSpotifyPanel();
+});
+
+async function openSpotifyPanel() {
+  spotifyPlaylist.style.display = 'none'; spotifySet.style.display = 'none'; spotifyNote.innerHTML = '';
+  let s;
+  try { s = await (await fetch('/spotify')).json(); } catch (err) { console.error(err); }
+  if (!s || !s.authorized) {
+    if (!s || !s.client_id_set) {
+      spotifyHead.textContent = 'Spotify not configured (add SPOTIFY_CLIENT_ID on the server).';
+    } else {
+      spotifyHead.textContent = 'Tap "Authorize Spotify" to connect your account.';
+      spotifyNote.innerHTML = '<a href="#" id="authNow">Authorize Spotify now</a>';
+      const a = $('authNow');
+      if (a) a.addEventListener('click', async (ev) => {
+        ev.preventDefault(); spotifyHead.textContent = 'Opening Spotify…';
+        // Cloud-friendly: fetch a public authorize URL and open it in a new tab.
+        // On success Spotify redirects to /spotify/callback, which saves the token.
+        try {
+          const r = await (await fetch('/spotify/auth_url')).json();
+          if (r && r.ok && r.auth_url) { window.open(r.auth_url, '_blank'); }
+          else { spotifyHead.textContent = 'Could not start authorization: ' + ((r && r.error) || 'unknown'); }
+        } catch (err) { console.error(err); spotifyHead.textContent = 'Could not reach server to authorize.'; }
+        setTimeout(loadSpotify, 6000); // pick up the newly-authorized state
+      });
+    }
+    return;
+  }
+  const pls = await (await fetch('/spotify/playlists')).json();
+  if (!pls || !pls.ok || !pls.playlists.length) { spotifyHead.textContent = 'No playlists found.'; return; }
+  spotifyHead.textContent = 'Choose your default playlist:';
+  spotifyPlaylist.innerHTML = '';
+  let selectedDefault = (s.default && (s.default.id || s.default.uri)) || '';
+  pls.playlists.forEach((p) => {
+    const opt = document.createElement('option');
+    opt.value = p.id; opt.textContent = p.name;
+    if (selectedDefault && (p.id === selectedDefault || p.id === selectedDefault.split(':').pop())) opt.selected = true;
+    spotifyPlaylist.appendChild(opt);
+  });
+  spotifyPlaylist.style.display = 'block';
+  const firstSel = spotifyPlaylist.selectedOptions[0];
+  spotifyNote.textContent = firstSel ? 'Tap "Set default →" to save: ' + firstSel.textContent : 'Choose a playlist, then tap "Set default →".';
+  spotifySet.style.display = 'block';
+  spotifySet.onclick = async () => {
+    const sel = spotifyPlaylist.selectedOptions[0];
+    if (!sel) return;
+    await fetch('/spotify/default', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ playlist_id: sel.value, name: sel.textContent }) });
+    spotifyLabel.textContent = sel.textContent;
+    spotifyNote.textContent = 'Saved! Say "play my music" to Peter.';
+  };
+  spotifyPlaylist.onchange = () => {
+    const sel = spotifyPlaylist.selectedOptions[0];
+    if (sel) spotifyNote.textContent = 'Tap "Set default →" to save: ' + sel.textContent;
+  };
+}
+
+/* Files: add a file for Peter from the phone */
+const dropZone = $('dropZone'), fileInput = $('fileInput');
+const dzProgress = $('dzProgress'), dzBar = dzProgress.querySelector('i');
+const filesActive = $('filesActive'), activeFileName = $('activeFileName'), activeFileLabel = $('activeFileLabel');
+const filePick = $('filePick'), filesPanel = $('filesPanel'), filesHead = $('filesHead');
+const filesList = $('filesList'), filesSet = $('filesSet');
+
+function setDzBusy(busy) {
+  dzProgress.style.display = busy ? 'block' : 'none';
+  if (busy) { dzBar.style.width = '0%'; requestAnimationFrame(() => { dzBar.style.transition = 'none'; dzBar.style.width = '70%'; setTimeout(() => { dzBar.style.transition = ''; dzBar.style.width = '100%'; }, 50); }); }
+}
+function showActiveFile(fs) {
+  const name = (fs && fs.active) || '';
+  if (name) { activeFileName.textContent = name; activeFileLabel.textContent = 'Active file — Peter can read this'; filesActive.classList.add('show'); }
+  else { activeFileName.textContent = 'No file'; activeFileLabel.textContent = 'No active file selected'; filesActive.classList.remove('show'); }
+}
+async function refreshFiles() {
+  let fs;
+  try { fs = await (await fetch('/files')).json(); } catch (e) { console.error('files_status', e); return; }
+  showActiveFile(fs);
+  const list = (fs && fs.files) || [];
+  filesList.innerHTML = '';
+  list.forEach((f) => { const opt = document.createElement('option'); opt.value = f; opt.textContent = f; if (fs.active === f) opt.selected = true; filesList.appendChild(opt); });
+}
+async function uploadFile(file) {
+  setDzBusy(true);
+  try {
+    const data = await new Promise((resolve, reject) => {
+      const rd = new FileReader();
+      rd.onload = () => resolve((rd.result || '').split(',')[1] || '');
+      rd.onerror = reject;
+      rd.readAsDataURL(file);
+    });
+    const r = await (await fetch('/files/save', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ filename: file.name || 'unnamed.txt', data: data }) })).json();
+    if (r && r.ok) { await refreshFiles(); setStatus('', 'Saved: ' + r.name + ' — say "talk about my file" to Peter'); }
+    else { setStatus('', 'Could not save that file'); }
+  } catch (e) { console.error('uploadFile', e); setStatus('', 'Could not read that file.'); }
+  finally { setDzBusy(false); dropZone.classList.remove('over'); fileInput.value = ''; }
+}
+dropZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => { const f = fileInput.files && fileInput.files[0]; if (f) uploadFile(f); });
+filePick.addEventListener('click', async (e) => {
+  e.stopPropagation();
+  if (filesPanel.classList.contains('open')) { filesPanel.classList.remove('open'); return; }
+  filesPanel.classList.add('open');
+  await refreshFiles();
+  if (filesList.options.length === 0) { filesHead.textContent = 'No files yet — tap "Tap to add a file for Peter" above.'; filesList.style.display = 'none'; filesSet.style.display = 'none'; return; }
+  filesHead.textContent = 'Choose the file Peter should read:';
+  filesList.style.display = 'block'; filesSet.style.display = 'block';
+});
+filesSet.addEventListener('click', async () => {
+  const sel = filesList.selectedOptions[0];
+  if (!sel) return;
+  const r = await (await fetch('/files/active', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ filename: sel.value }) })).json();
+  if (r && r.ok) { await refreshFiles(); showActiveFile({ active: sel.value }); setStatus('', 'Active file set: ' + sel.value); }
+  else { setStatus('', 'Could not set that file as active.'); }
+});
+
+/* Chat transcript (Peter's spoken replies) */
+const chatLog = $('chatLog'), chatEmpty = $('chatEmpty');
+function escapeHtml(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '<').replace(/>/g, '>').replace(/"/g, '"'); }
+function linkify(text) {
+  return escapeHtml(text).replace(/((?:https?:\/\/|www\.)[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+}
+function appendMsg(text) {
+  if (!text || !text.trim()) return;
+  if (chatEmpty) chatEmpty.remove(); chatEmpty = null;
+  const wrap = document.createElement('div');
+  wrap.className = 'msg peter';
+  const whoEl = document.createElement('div'); whoEl.className = 'who'; whoEl.textContent = 'PETER';
+  const bubble = document.createElement('div'); bubble.className = 'bubble'; bubble.innerHTML = linkify(text);
+  wrap.appendChild(whoEl); wrap.appendChild(bubble);
+  chatLog.appendChild(wrap);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+function handleDataReceived(payload, participant, kind, topic) {
+  if (kind !== 'reliable') return;
+  try {
+    const msg = JSON.parse(new TextDecoder().decode(payload));
+    if (msg && msg.transcriptions && Array.isArray(msg.transcriptions)) {
+      for (const t of msg.transcriptions) {
+        if (!t || !t.text) continue;
+        if (t.participant) continue;
+        appendMsg(t.text.trim());
+      }
+    }
+  } catch (e) { }
+}
+
+/* Register service worker for the home-screen shortcut */
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch((e) => console.error('SW error', e));
+}
+
+loadUrl(); loadConnectionInfo(); loadSpotify(); refreshFiles();
+</script>
+</body>
+</html>

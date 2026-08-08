@@ -1,0 +1,28 @@
+# Secrets — never commit these
+.env
+
+# Local token/auth state
+spotify_token.json
+active_file.json
+spotify_default_playlist.json
+pending_url.txt
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Local data
+memory_store/
+received_files/
+KMS/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Logs
+*.log

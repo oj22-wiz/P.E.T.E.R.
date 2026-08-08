@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>P.E.T.E.R.</title>
+<style>
+  :root {
+    --red: #e62429;
+    --blue: #3d7bfd;
+    --green: #2ecc71;
+    --txt: #ffffff;
+    --dim: #b8c4e0;
+    --panel: rgba(20, 28, 52, .92);
+    --line: rgba(255,255,255,.14);
+    --glass: rgba(16, 24, 46, .82);
+    --glass-hi: rgba(30, 40, 74, .9);
+    --radius: 14px;
+    --col: 300px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    background: #000000 !important;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    color: var(--txt);
+    overflow: hidden;
+    user-select: none;
+    width: 100%; height: 100%;
+  }
+  body {
+    display: flex; flex-direction: column;
+    align-items: center;
+    padding: 8px 10px 10px;
+    gap: 8px;
+  }
+
+  /* ── Unified command dock (URL + Share + Spotify in one glass panel) ── */
+  .dock {
+    width: 100%; max-width: var(--col); z-index: 5;
+    background: var(--glass);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 8px;
+    display: flex; flex-direction: column; gap: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.45);
+  }
+  .dock .row {
+    display: flex; align-items: center; gap: 6px;
+    height: 32px;
+  }
+  .dock input[type="text"] {
+    flex: 1; min-width: 0; height: 100%; padding: 0 11px; border-radius: 999px;
+    border: 1px solid var(--line); outline: none; background: var(--panel);
+    color: var(--txt); font-size: 11px; transition: border-color .2s, box-shadow .2s;
+  }
+  .dock input::placeholder { color: var(--dim); }
+  .dock input:focus { border-color: var(--blue); box-shadow: 0 0 10px rgba(61,123,253,.4); }
+
+  .row-action {
+    flex: 1; height: 100%; cursor: pointer; padding: 0 12px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--panel); color: #fff; font-size: 11px;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    white-space: nowrap; overflow: hidden;
+    transition: border-color .2s, box-shadow .2s, background .2s;
+  }
+  .row-action:hover { border-color: var(--blue); box-shadow: 0 0 10px rgba(61,123,253,.35); background: var(--glass-hi); }
+  .row-action span { text-overflow: ellipsis; overflow: hidden; }
+  .share-btn.sharing { border-color: var(--red); background: rgba(230,36,41,.22); box-shadow: 0 0 12px rgba(230,36,41,.45); }
+  .share-btn .dot, .spotify-btn .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--dim); flex: none; }
+  .share-btn.sharing .dot { background: var(--red); box-shadow: 0 0 6px var(--red); animation: blink 1.2s infinite; }
+  .spotify-btn.authorized { border-color: var(--green); }
+  .spotify-btn.authorized .dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+
+  .dock-mini {
+    flex: none; width: 30px; height: 100%; cursor: pointer; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--panel); color: #fff; font-size: 12px;
+    font-weight: 700; line-height: 1; display: flex; align-items: center; justify-content: center;
+    transition: color .2s, border-color .2s, background .2s;
+  }
+  .dock-mini:hover { color: #fff; border-color: var(--red); background: rgba(230,36,41,.35); }
+  .dock-mini:active { transform: scale(.92); }
+
+  /* Spotify / Files pop panels */
+  .pop-panel {
+    position: absolute; bottom: calc(100% + 6px); left: 0; right: 0;
+    background: rgba(10, 16, 32, .98); border: 1px solid var(--line);
+    border-radius: 12px; padding: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.6);
+    color: #fff; z-index: 6;
+  }
+  .pop-head { font-size: 10px; color: var(--dim); margin-bottom: 6px; line-height: 1.35; }
+  .pop-panel select {
+    width: 100%; padding: 6px 8px; border-radius: 8px; font-size: 10px;
+    border: 1px solid var(--line); background: #0a1128; color: #fff; outline: none;
+    max-height: 120px; overflow-y: auto;
+  }
+  .pop-note { font-size: 9px; color: var(--dim); margin-top: 6px; line-height: 1.4; }
+  .pop-note a { color: var(--green); }
+  .pop-set {
+    margin-top: 6px; width: 100%; padding: 6px; border-radius: 8px;
+    border: 1px solid rgba(46,204,113,.5); background: rgba(46,204,113,.15); color: #fff;
+    font-size: 10px; cursor: pointer; transition: background .2s, border-color .2s;
+  }
+  .pop-set:hover { background: rgba(46,204,113,.28); border-color: var(--green); }
+  .pop-clear {
+    margin-top: 6px; width: 100%; padding: 6px; border-radius: 8px;
+    border: 1px solid var(--line); background: rgba(230,36,41,.12); color: #fff;
+    font-size: 10px; cursor: pointer; transition: background .2s, border-color .2s;
+  }
+  .pop-clear:hover { background: rgba(230,36,41,.3); border-color: var(--red); }
+
+  .str-wrap { position: relative; }
+
+  /* ── Status pill ── */
+  .status {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 10px; color: var(--dim); letter-spacing: .3px;
+    background: rgba(10,16,34,.55); border: 1px solid var(--line);
+    padding: 3px 9px; border-radius: 999px; white-space: nowrap; max-width: 92%;
+    overflow: hidden; z-index: 5; margin-top: 2px;
+  }
+  .status .txt { text-overflow: ellipsis; overflow: hidden; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--dim); flex: none; transition: background .3s, box-shadow .3s; }
+  .dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot.talking { background: var(--blue); box-shadow: 0 0 8px var(--blue); animation: blink 1.2s infinite; }
+  .dot.speaking { background: var(--red); box-shadow: 0 0 10px var(--red); animation: blink .8s infinite; }
+  @keyframes blink { 50% { opacity: .4; } }
+
+  /* ── Files drop card ── */
+  .files-slot { width: 100%; max-width: var(--col); position: relative; z-index: 5; }
+  .drop-zone {
+    width: 100%; min-height: 74px; padding: 10px 12px; border-radius: var(--radius);
+    border: 1.5px dashed rgba(255,255,255,.28); background: rgba(20,28,52,.5);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; cursor: pointer; gap: 3px;
+    transition: border-color .2s, background .2s, box-shadow .2s, transform .15s;
+  }
+  .drop-zone:hover { border-color: var(--blue); background: rgba(30,40,74,.6); box-shadow: 0 0 14px rgba(61,123,253,.25); }
+  .drop-zone:active { transform: scale(.99); }
+  .drop-zone.over { border-color: var(--green); background: rgba(46,204,113,.12); box-shadow: 0 0 16px rgba(46,204,113,.4); }
+  .dz-ic { font-size: 20px; line-height: 1; }
+  .dz-title { font-size: 11px; font-weight: 600; color: #fff; }
+  .dz-sub { font-size: 9px; color: var(--dim); line-height: 1.3; }
+  .dz-progress { display: none; margin-top: 2px; width: 100%; height: 4px; border-radius: 999px; background: rgba(255,255,255,.12); overflow: hidden; }
+  .dz-progress i { display: block; height: 100%; width: 0; background: var(--blue); border-radius: 999px; transition: width .2s; }
+
+  .files-active {
+    margin-top: 6px; width: 100%; min-height: 58px; border-radius: var(--radius);
+    border: 1px solid var(--line); background: rgba(20,28,52,.6);
+    padding: 8px 12px; display: none; align-items: center; gap: 10px;
+  }
+  .files-active.show { display: flex; }
+  .file-chip { flex: none; width: 34px; height: 34px; border-radius: 11px; background: linear-gradient(140deg, rgba(61,123,253,.32), rgba(230,36,41,.28)); border: 1px solid rgba(255,255,255,.18); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .file-meta { flex: 1; min-width: 0; }
+  .file-name { font-size: 11px; font-weight: 600; color: #fff; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+  .file-label { font-size: 8.5px; color: var(--dim); margin-top: 2px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+  .file-pick { flex: none; cursor: pointer; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); background: rgba(20,28,52,.8); color: #fff; font-size: 9px; font-weight: 600; transition: border-color .2s, background .2s, box-shadow .2s; }
+  .file-pick:hover { border-color: var(--blue); box-shadow: 0 0 10px rgba(61,123,253,.4); background: rgba(61,123,253,.22); }
+  .file-pick:active { transform: scale(.95); }
+
+  /* ── Hero orb ── */
+  .orb-wrap { position: relative; width: 128px; height: 128px; z-index: 1; cursor: pointer; flex: none; }
+  .halo { position: absolute; inset: 6px; border-radius: 50%; z-index: 0; background: radial-gradient(circle, rgba(61,123,253,.45) 0%, rgba(230,36,41,.28) 55%, transparent 72%); filter: blur(8px); animation: halo-breathe 3.2s ease-in-out infinite; }
+  @keyframes halo-breathe { 0%,100% { transform: scale(.92); opacity: .65; } 50% { transform: scale(1.08); opacity: 1; } }
+  .orb { position: relative; width: 102px; height: 102px; margin: 13px auto 0; border-radius: 50%; z-index: 1; background: radial-gradient(circle at 32% 26%, rgba(255,255,255,.28) 0%, transparent 42%), radial-gradient(circle at 50% 55%, #12204a 0%, #0a1128 70%); border: 2px solid rgba(255,255,255,.16); box-shadow: 0 8px 26px rgba(0,0,0,.55), 0 0 24px rgba(61,123,253,.35); display: flex; align-items: center; justify-content: center; transition: box-shadow .3s, border-color .3s, transform .15s; }
+  .orb:hover { transform: scale(1.04); box-shadow: 0 8px 30px rgba(0,0,0,.6), 0 0 34px rgba(61,123,253,.55); }
+  .orb:active { transform: scale(.96); }
+  .orb .web { position: absolute; inset: 0; border-radius: 50%; opacity: .14; background-image: repeating-linear-gradient(45deg, #fff 0 1.5px, transparent 1.5px 11px), repeating-linear-gradient(-45deg, #fff 0 1.5px, transparent 1.5px 11px); }
+  .orb .mask { position: absolute; width: 56px; height: 47px; border-radius: 50%; background: radial-gradient(circle at 40% 34%, #d43a3f 0%, var(--red) 58%, #a8181d 100%); border: 2px solid rgba(0,0,0,.5); box-shadow: inset 0 -3px 7px rgba(0,0,0,.4), 0 0 10px rgba(230,36,41,.4); }
+  .orb .eye { position: absolute; width: 17px; height: 12px; background: #fff; border-radius: 50%; top: 43px; box-shadow: inset 0 -2px 3px rgba(0,0,0,.35); transition: transform .2s, height .2s; }
+  .orb .eye.l { left: 44px; } .orb .eye.r { right: 44px; }
+  .orb-wrap.interacting .orb .eye { transform: scaleY(.45); }
+  .orb-wrap.speaking .orb { border-color: rgba(230,36,41,.7); box-shadow: 0 8px 30px rgba(0,0,0,.6), 0 0 36px rgba(230,36,41,.7); animation: speaking-glow 1.1s ease-in-out infinite; }
+  .orb-wrap.speaking .halo { animation: halo-breathe 1.1s ease-in-out infinite; }
+  @keyframes speaking-glow { 0%,100% { box-shadow: 0 8px 30px rgba(0,0,0,.6), 0 0 22px rgba(230,36,41,.55); transform: scale(1); } 50% { box-shadow: 0 8px 34px rgba(0,0,0,.65), 0 0 44px rgba(230,36,41,.95); transform: scale(1.06); } }
+  .waves { position: absolute; inset: -6px; border-radius: 50%; z-index: 0; pointer-events: none; }
+  .waves i { position: absolute; inset: 20px; border-radius: 50%; border: 2px solid rgba(230,36,41,0); }
+  .orb-wrap.speaking .waves i:nth-child(1) { animation: ripple 1.2s ease-out infinite; }
+  .orb-wrap.speaking .waves i:nth-child(2) { animation: ripple 1.2s ease-out .3s infinite; }
+  .orb-wrap.speaking .waves i:nth-child(3) { animation: ripple 1.2s ease-out .6s infinite; }
+  @keyframes ripple { 0% { transform: scale(.55); opacity: .9; border-color: rgba(230,36,41,.7); } 100% { transform: scale(1.6); opacity: 0; border-color: rgba(230,36,41,0); } }
+  .orb-wrap.listening .orb { border-color: rgba(61,123,253,.65); animation: listen-pulse 1.2s ease-in-out infinite; }
+  @keyframes listen-pulse { 0%,100% { box-shadow: 0 8px 30px rgba(0,0,0,.6), 0 0 24px rgba(61,123,253,.5); } 50% { box-shadow: 0 8px 34px rgba(0,0,0,.65), 0 0 42px rgba(61,123,253,.9); } }
+  .tap-hint { position: absolute; left: 50%; transform: translateX(-50%); bottom: -4px; font-size: 10px; color: var(--dim); letter-spacing: .5px; text-shadow: 0 1px 4px rgba(0,0,0,.8); white-space: nowrap; }
+
+  .loader { display: inline-block; width: 10px; height: 10px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: rotate .7s linear infinite; }
+  @keyframes rotate { to { transform: rotate(360deg); } }
+
+  /* ── Cinematic Spiderman canvas (balanced with the chat) ── */
+  .spidey { width: 100%; flex: 1 1 auto; min-height: 0; position: relative; z-index: 0; border-radius: var(--radius); overflow: hidden; background: #0a0e1f; border: 1px solid var(--line); }
+  .spidey canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+
+  /* ── Chat transcript below the orb ── */
+  .chat { width: 100%; max-width: var(--col); display: flex; flex-direction: column; background: rgba(20,28,52,.55); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; z-index: 2; flex: none; }
+  .chat-log { height: 116px; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 6px; scroll-behavior: smooth; }
+  .chat-log::-webkit-scrollbar { width: 5px; }
+  .chat-log::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 999px; }
+  .msg { display: flex; flex-direction: column; max-width: 92%; }
+  .msg.peter { align-self: flex-start; align-items: flex-start; }
+  .msg .who { font-size: 7px; color: var(--dim); letter-spacing: .4px; margin-bottom: 1px; }
+  .msg .bubble { padding: 5px 7px; border-radius: 11px; font-size: 8.5px; line-height: 1.4; word-break: break-word; white-space: pre-wrap; }
+  .msg.peter .bubble { background: rgba(230,36,41,.16); border: 1px solid rgba(230,36,41,.3); }
+  .msg.peter a { color: var(--blue); text-decoration: underline; }
+
+  /* ── Window controls ── */
+  .win-controls { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; padding: 6px 8px; z-index: 10; pointer-events: none; }
+  .win-controls button { pointer-events: auto; cursor: pointer; width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(255,255,255,.25); background: rgba(10,16,34,.6); color: #fff; font-size: 13px; font-weight: 700; line-height: 1; display: flex; align-items: center; justify-content: center; transition: background .2s, border-color .2s, transform .1s; }
+  .win-controls button:hover { background: rgba(61,123,253,.35); border-color: rgba(255,255,255,.5); }
+  .win-controls button:active { transform: scale(.9); }
+  .win-controls .btn-close:hover { background: rgba(230,36,41,.6); border-color: var(--red); }
+</style>
+</head>
+<body>
+
+<!-- Window controls: '-' minimizes, 'X' closes both -->
+<div class="win-controls">
+  <button id="btnMinimize" title="Minimize (Peter keeps running)">&minus;</button>
+  <button id="btnClose" class="btn-close" title="Close (shuts down Peter)">&#10005;</button>
+</div>
+
+<div class="status"><div class="dot" id="statusDot"></div><span class="txt" id="statusText">Ready</span></div>
+
+<!-- Unified command dock: URL + Share + Spotify -->
+<div class="dock">
+  <div class="row">
+    <input id="urlInput" type="text" placeholder="Paste a URL…" autocomplete="off" spellcheck="false" />
+    <button class="dock-mini" id="urlClear" title="Clear URL">✕</button>
+  </div>
+  <div class="row">
+    <button class="row-action share-btn" id="shareBtn" title="Share your screen with Peter">
+      <span class="dot"></span><span id="shareLabel">Share screen</span>
+    </button>
+  </div>
+  <div class="row">
+    <div class="str-wrap spotify-slot" id="spotifySlot" style="flex:1;min-width:0;position:relative;height:100%;">
+      <button class="row-action spotify-btn" id="spotifyBtn" title="Spotify">
+        <span class="dot"></span><span id="spotifyLabel">Spotify</span>
+      </button>
+      <div class="pop-panel" id="spotifyPanel" hidden>
+        <div class="pop-head" id="spotifyHead">Loading…</div>
+        <select id="spotifyPlaylist" hidden></select>
+        <div class="pop-note" id="spotifyNote"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Files drop card -->
+<div class="files-slot" id="filesSlot">
+  <div class="str-wrap" style="position:relative;">
+    <div class="drop-zone" id="dropZone" title="Drop a file here, or click to browse">
+      <div class="dz-ic">📁</div>
+      <div class="dz-title">Drop a file for Peter</div>
+      <div class="dz-sub">…or click to browse · becomes the active file</div>
+      <div class="dz-progress" id="dzProgress"><i></i></div>
+    </div>
+    <div class="pop-panel" id="filesPanel" hidden>
+      <div class="pop-head" id="filesHead">Loading…</div>
+      <select id="filesList" hidden></select>
+      <button class="pop-set" id="filesSet" hidden>Set active →</button>
+      <div class="pop-note" id="filesNote"></div>
+    </div>
+  </div>
+  <div class="files-active" id="filesActive">
+    <div class="file-chip">📄</div>
+    <div class="file-meta">
+      <div class="file-name" id="activeFileName">No file</div>
+      <div class="file-label" id="activeFileLabel">No active file selected</div>
+    </div>
+    <button class="file-pick" id="filePick" title="Choose a received file">Select</button>
+  </div>
+</div>
+
+<!-- Hero orb -->
+<div class="orb-wrap" id="orbWrap" title="Click to talk to Peter">
+  <div class="halo"></div>
+  <div class="waves"><i></i><i></i><i></i></div>
+  <div class="orb" id="orb">
+    <div class="web"></div>
+    <div class="mask"></div>
+    <div class="eye l"></div>
+    <div class="eye r"></div>
+  </div>
+  <div class="tap-hint" id="tapHint">Tap to talk</div>
+</div>
+
+<!-- Cinematic 8-bit Spiderman swinging scene (fills remaining vertical space, no sound) -->
+<div class="spidey">
+  <canvas id="spideyCanvas"></canvas>
+</div>
+
+<!-- Chat transcript below the orb -->
+<div class="chat" id="chat">
+  <div class="chat-log" id="chatLog"></div>
+</div>
+
+<!-- LiveKit client (UMD — exposes window.LivekitClient) -->
+<script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const statusDot = $('statusDot'), statusText = $('statusText');
+const orbWrap = $('orbWrap');
+
+let room = null, micTrack = null, audioEl = null, audioCtx = null;
+let liveKitToken = null, liveKitUrl = null, active = false;
+
+function setStatus(kind, text) {
+  statusDot.className = 'dot' + (kind ? ' ' + kind : '');
+  statusText.textContent = text;
+}
+
+function setOrbState(state) {
+  orbWrap.classList.remove('speaking', 'listening', 'interacting');
+  if (state === 'speaking') orbWrap.classList.add('speaking');
+  else if (state === 'listening') orbWrap.classList.add('listening');
+  else if (state === 'interacting') orbWrap.classList.add('interacting');
+}
+
+async function loadConnectionInfo() {
+  try {
+    const info = await window.pywebview.api.get_connection_info();
+    liveKitUrl = info.url;
+    liveKitToken = info.token;
+    setStatus('online', 'Tap to talk');
+    return true;
+  } catch (e) {
+    console.error(e);
+    setStatus('', 'Token error');
+    return false;
+  }
+}
+
+async function toggleCall() {
+  if (active) { await endCall(); return; }
+  if (!liveKitToken && !(await loadConnectionInfo())) return;
+  setOrbState('interacting');
+  $('tapHint').textContent = 'Connecting…';
+  try {
+    room = new LivekitClient.Room();
+    room.on(LivekitClient.RoomEvent.TrackSubscribed, onTrackSubscribed);
+    room.on(LivekitClient.RoomEvent.DataReceived, handleDataReceived);
+    room.on(LivekitClient.RoomEvent.MediaDevicesError, (e) => console.error('media error', e));
+    await room.connect(liveKitUrl, liveKitToken, { autoSubscribe: true });
+    micTrack = await LivekitClient.createLocalAudioTrack();
+    await room.localParticipant.publishTrack(micTrack);
+    setStatus('talking', 'Listening…');
+    await waitForAgent(60000);
+    setStatus('talking', 'Peter is listening');
+    active = true;
+    setOrbState('listening');
+    $('tapHint').textContent = 'Tap to end';
+  } catch (e) {
+    console.error(e);
+    setStatus('', 'Could not reach Peter');
+    $('tapHint').textContent = 'Tap to talk';
+    setOrbState(null);
+    await cleanupRoom();
+  }
+}
+
+function onTrackSubscribed(track, publication, participant) {
+  if (track.kind !== 'audio') return;
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = audioCtx.createMediaStreamSource(new MediaStream([track.mediaStreamTrack]));
+    src.connect(audioCtx.destination);
+    if (!audioEl) { audioEl = track.attach(); audioEl.autoplay = true; document.body.appendChild(audioEl); }
+    setOrbState('speaking');
+    track.on(LivekitClient.TrackEvent.Ended, () => { if (active) setOrbState('listening'); });
+  } catch (e) { console.error('failed to play agent audio', e); }
+}
+
+function waitForAgent(timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const t0 = Date.now();
+    const timer = setInterval(() => {
+      const hasAgent = room && room.remoteParticipants.size > 0;
+      if (hasAgent) {
+        clearInterval(timer);
+        room.remoteParticipants.forEach((p) => p.trackPublications.forEach((pub) => { if (pub.kind === 'audio' && pub.track && !pub.track.isSubscribed) pub.setSubscribed(true); }));
+        resolve();
+      } else if (Date.now() - t0 > timeoutMs) { clearInterval(timer); reject(new Error('timeout waiting for Peter')); }
+    }, 400);
+  });
+}
+
+async function cleanupRoom() {
+  try {
+    if (micTrack) { micTrack.stop(); micTrack = null; }
+    if (audioEl) { audioEl.remove(); audioEl = null; }
+    if (room) { await room.disconnect(); room = null; }
+  } catch (e) { console.error(e); }
+}
+
+async function endCall() {
+  await cleanupRoom();
+  active = false;
+  screenTrack = null;
+  setSharing(false);
+  setOrbState(null);
+  $('tapHint').textContent = 'Tap to talk';
+  setStatus('online', 'Tap to talk');
+}
+
+const urlInput = $('urlInput'), urlClear = $('urlClear');
+let urlSaveTimer = null;
+function saveUrl() {
+  clearTimeout(urlSaveTimer);
+  urlSaveTimer = setTimeout(async () => {
+    try { await window.pywebview.api.set_pending_url(urlInput.value.trim()); } catch (e) { console.error('failed to save URL', e); }
+  }, 300);
+}
+async function loadUrl() {
+  try { const r = await window.pywebview.api.get_pending_url(); if (r && r.url) urlInput.value = r.url; } catch (e) { console.error('failed to load URL', e); }
+}
+urlInput.addEventListener('input', saveUrl);
+urlClear.addEventListener('click', async () => {
+  urlInput.value = '';
+  try { await window.pywebview.api.set_pending_url(''); } catch (e) { console.error(e); }
+});
+orbWrap.addEventListener('click', toggleCall);
+
+const shareBtn = $('shareBtn'), shareLabel = $('shareLabel');
+let screenTrack = null;
+function setSharing(on) {
+  shareBtn.classList.toggle('sharing', on);
+  shareLabel.textContent = on ? 'Sharing screen' : 'Share screen';
+}
+async function stopScreenShare() {
+  if (screenTrack) { try { screenTrack.stop(); } catch (e) {} screenTrack = null; }
+  if (room && active) { try { await room.localParticipant.unpublishTrack('screen'); } catch (e) { console.error('unpublish screen error', e); } }
+  setSharing(false);
+}
+async function startScreenShare() {
+  if (!room || !active) { setStatus('', 'Join a call first (tap the orb)'); return; }
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: { width: { ideal: 1280, max: 1280 }, height: { ideal: 720, max: 720 }, frameRate: { ideal: 4, max: 5 } } });
+    screenTrack = stream.getVideoTracks()[0];
+    if (!screenTrack) throw new Error('No screen track selected');
+    screenTrack.onended = () => { screenTrack = null; setSharing(false); };
+    await room.localParticipant.publishTrack(screenTrack, { source: 'screen', name: 'screen' });
+    setSharing(true);
+  } catch (e) { console.error('screen share error', e); setStatus('', 'Screen share cancelled'); }
+}
+shareBtn.addEventListener('click', async () => { if (screenTrack) { await stopScreenShare(); } else { await startScreenShare(); } });
+
+const spotifyBtn = $('spotifyBtn'), spotifyLabel = $('spotifyLabel');
+const spotifyPanel = $('spotifyPanel'), spotifyHead = $('spotifyHead');
+const spotifyPlaylist = $('spotifyPlaylist'), spotifyNote = $('spotifyNote');
+
+async function loadSpotify() {
+  try {
+    const s = await window.pywebview.api.spotify_status();
+    if (s && s.authorized) {
+      spotifyBtn.classList.add('authorized');
+      if (s.default && s.default.name) spotifyLabel.textContent = s.default.name; else spotifyLabel.textContent = 'Linked ✓';
+    } else {
+      spotifyBtn.classList.remove('authorized');
+      spotifyLabel.textContent = 'Link Spotify';
+      if (s && s.client_id_set) spotifyHead.textContent = 'Linked ✓ — tap 🎧 to pick a playlist'; else spotifyHead.textContent = 'Add SPOTIFY_CLIENT_ID to .env first.';
+    }
+  } catch (e) { console.error('loadSpotify', e); }
+}
+
+spotifyBtn.addEventListener('click', async (e) => {
+  e.stopPropagation();
+  if (spotifyPanel.hidden) { spotifyPanel.hidden = false; await openSpotifyPanel(); } else { spotifyPanel.hidden = true; }
+});
+
+async function openSpotifyPanel() {
+  spotifyPlaylist.hidden = true;
+  spotifyNote.textContent = '';
+  let s;
+  try { s = await window.pywebview.api.spotify_status(); } catch (err) { console.error(err); }
+  if (!s || !s.authorized) {
+    if (!s || !s.client_id_set) {
+      spotifyHead.textContent = 'Add SPOTIFY_CLIENT_ID & SPOTIFY_CLIENT_SECRET to .env, then restart the app to link Spotify.';
+    } else {
+      spotifyHead.textContent = 'Tap "Authorize" below to connect Spotify in your browser.';
+      spotifyNote.innerHTML = '<a href="#" id="authNow">Authorize Spotify now</a>';
+      const a = $('authNow');
+      if (a) a.addEventListener('click', async (ev) => { ev.preventDefault(); spotifyHead.textContent = 'Opening browser… authorize and come back here.'; try { await window.pywebview.api.spotify_authorize(); setTimeout(loadSpotify, 4000); } catch (err) { console.error(err); } });
+    }
+    return;
+  }
+  const pls = await window.pywebview.api.spotify_get_playlists();
+  if (!pls || !pls.ok || !pls.playlists.length) { spotifyHead.textContent = 'No playlists found on your Spotify.'; return; }
+  spotifyHead.textContent = 'Choose your default playlist:';
+  spotifyPlaylist.innerHTML = '';
+  let selectedDefault = '';
+  if (s && s.default) selectedDefault = s.default.id || s.default.uri || '';
+  pls.playlists.forEach((p) => {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = p.name;
+    if (selectedDefault && (p.id === selectedDefault || p.uri === selectedDefault || p.id === selectedDefault.split(':').pop())) opt.selected = true;
+    spotifyPlaylist.appendChild(opt);
+  });
+  spotifyPlaylist.hidden = false;
+  spotifyNote.innerHTML = '';
+  const noteTxt = document.createElement('span');
+  noteTxt.id = 'spotifyNoteTxt';
+  const firstSel = spotifyPlaylist.selectedOptions[0];
+  noteTxt.textContent = firstSel ? 'Tap "Set default →" to save: ' + firstSel.textContent : 'Choose a playlist, then tap "Set default →".';
+  spotifyNote.appendChild(noteTxt);
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'pop-set';
+  saveBtn.textContent = 'Set default →';
+  saveBtn.addEventListener('click', async () => {
+    const sel = spotifyPlaylist.selectedOptions[0];
+    if (!sel) return;
+    await window.pywebview.api.spotify_set_default_playlist(sel.value, sel.textContent);
+    spotifyLabel.textContent = sel.textContent;
+    spotifyNote.textContent = 'Saved! Say "play my music" to Peter.';
+  });
+  spotifyNote.appendChild(saveBtn);
+  spotifyPlaylist.addEventListener('change', () => {
+    const sel = spotifyPlaylist.selectedOptions[0];
+    const t = document.getElementById('spotifyNoteTxt');
+    if (sel && t) t.textContent = 'Tap "Set default →" to save: ' + sel.textContent;
+  });
+}
+
+const dropZone = $('dropZone'), dzProgress = $('dzProgress'), dzBar = dzProgress.querySelector('i');
+const filesActive = $('filesActive'), activeFileName = $('activeFileName'), activeFileLabel = $('activeFileLabel');
+const filePick = $('filePick'), filesPanel = $('filesPanel'), filesHead = $('filesHead');
+const filesList = $('filesList'), filesSet = $('filesSet'), filesNote = $('filesNote');
+
+function setDzBusy(busy) {
+  dzProgress.style.display = busy ? 'block' : 'none';
+  if (busy) { dzBar.style.width = '0%'; requestAnimationFrame(() => { dzBar.style.transition = 'none'; dzBar.style.width = '70%'; setTimeout(() => { dzBar.style.transition = ''; dzBar.style.width = '100%'; }, 50); }); }
+}
+function showActiveFile(fs) {
+  const name = (fs && fs.active) || '';
+  if (name) { activeFileName.textContent = name; activeFileLabel.textContent = 'Active file — Peter can read this'; filesActive.classList.add('show'); }
+  else { activeFileName.textContent = 'No file'; activeFileLabel.textContent = 'No active file selected'; filesActive.classList.remove('show'); }
+}
+async function refreshFiles() {
+  let fs;
+  try { fs = await window.pywebview.api.files_status(); } catch (e) { console.error('files_status', e); return; }
+  showActiveFile(fs);
+  const list = (fs && fs.files) || [];
+  filesList.innerHTML = '';
+  list.forEach((f) => { const opt = document.createElement('option'); opt.value = f; opt.textContent = f; if (fs.active === f) opt.selected = true; filesList.appendChild(opt); });
+}
+async function saveDroppedFile(file) {
+  setDzBusy(true);
+  try {
+    const data = await new Promise((resolve, reject) => {
+      const rd = new FileReader();
+      rd.onload = () => resolve((rd.result || '').split(',')[1] || '');
+      rd.onerror = reject;
+      rd.readAsDataURL(file);
+    });
+    const r = await window.pywebview.api.files_save(file.name || 'unnamed.txt', data);
+    if (r && r.ok) { await refreshFiles(); filesNote.textContent = 'Saved & set active: ' + r.name + '  (say "talk about my file" to Peter)'; }
+    else { filesNote.textContent = 'Could not save that file' + ((r && r.error) ? ': ' + r.error : '.') ; }
+  } catch (e) { console.error('saveDroppedFile', e); filesNote.textContent = 'Could not read that file.'; }
+  finally { setDzBusy(false); dropZone.classList.remove('over'); }
+}
+dropZone.addEventListener('click', async () => {
+  try {
+    const r = await window.pywebview.api.files_choose();
+    if (r && r.ok) { await refreshFiles(); filesNote.textContent = 'Saved & set active: ' + r.name; }
+    else if (r && r.cancelled) { }
+    else { filesNote.textContent = 'Could not open that file.'; }
+  } catch (e) { console.error('files_choose', e); }
+});
+['dragenter', 'dragover'].forEach((evt) => dropZone.addEventListener(evt, (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.add('over'); }));
+['dragleave', 'drop'].forEach((evt) => dropZone.addEventListener(evt, (e) => { e.preventDefault(); e.stopPropagation(); e.type !== 'drop' && dropZone.classList.remove('over'); }));
+dropZone.addEventListener('drop', (e) => { const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (file) saveDroppedFile(file); });
+
+filePick.addEventListener('click', async (e) => {
+  e.stopPropagation();
+  if (filesPanel.hidden) {
+    filesPanel.hidden = false;
+    await refreshFiles();
+    if (filesList.options.length === 0) {
+      filesHead.textContent = 'No received files yet — drop one above.';
+      filesList.hidden = true; filesSet.hidden = true; filesNote.textContent = '';
+      return;
+    }
+    filesHead.textContent = 'Choose the file Peter should read:';
+    filesList.hidden = false; filesSet.hidden = false;
+    const firstSel = filesList.selectedOptions[0];
+    filesNote.textContent = firstSel ? 'Tap "Set active →" to save: ' + firstSel.textContent : 'Pick a file, then tap "Set active →".';
+  } else { filesPanel.hidden = true; }
+});
+filesSet.addEventListener('click', async () => {
+  const sel = filesList.selectedOptions[0];
+  if (!sel) return;
+  const r = await window.pywebview.api.files_set_active(sel.value);
+  if (r && r.ok) { await refreshFiles(); showActiveFile({ active: sel.value }); filesNote.textContent = 'Active file set: ' + sel.value + '  (say "talk about my file" to Peter)'; }
+  else { filesNote.textContent = 'Could not set that file as active.'; }
+});
+filesList.addEventListener('change', () => { const sel = filesList.selectedOptions[0]; if (sel) filesNote.textContent = 'Tap "Set active →" to save: ' + sel.textContent; });
+
+const chatLog = $('chatLog');
+function escapeHtml(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '<').replace(/>/g, '>').replace(/"/g, '"'); }
+function linkify(text) {
+  return escapeHtml(text).replace(/((?:https?:\/\/|www\.)[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+}
+function appendMsg(text) {
+  if (!text || !text.trim()) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'msg peter';
+  const whoEl = document.createElement('div'); whoEl.className = 'who'; whoEl.textContent = 'PETER';
+  const bubble = document.createElement('div'); bubble.className = 'bubble'; bubble.innerHTML = linkify(text);
+  wrap.appendChild(whoEl); wrap.appendChild(bubble);
+  chatLog.appendChild(wrap);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+function handleDataReceived(payload, participant, kind, topic) {
+  if (kind !== 'reliable') return;
+  try {
+    const msg = JSON.parse(new TextDecoder().decode(payload));
+    if (msg && msg.transcriptions && Array.isArray(msg.transcriptions)) {
+      for (const t of msg.transcriptions) {
+        if (!t || !t.text) continue;
+        if (t.participant) continue;
+        appendMsg(t.text.trim());
+      }
+    }
+  } catch (e) { }
+}
+
+$('btnMinimize').addEventListener('click', (e) => { e.stopPropagation(); try { window.pywebview.api.minimize_window(); } catch (err) { console.error(err); } });
+$('btnClose').addEventListener('click', (e) => { e.stopPropagation(); try { window.pywebview.api.close_window(); } catch (err) { console.error(err); } });
+
+/* ── 8-bit Spiderman swinging animation (loop, no sound) ── */
+(function spidey() {
+  const cv = document.getElementById('spideyCanvas');
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  const PX = 3;
+  let W = 0, H = 0, TOR = 0;
+  const skyLo = '#0a0e1f', skyHi = '#1a2246', winOn = '#ffd96a';
+  let CITYW = 0, city = [];
+  function makeCity() {
+    const c = []; let x = 0;
+    while (x < W + 200) {
+      const bw = 8 + Math.floor(Math.random() * 18);
+      const bh = 50 + Math.floor(Math.random() * (H * 0.55 | 0));
+      const roofY = Math.max(5, Math.floor(H * 0.08 + (H - 46 - bh) - Math.random() * 26));
+      c.push({ x: x, w: bw, h: bh, roofY: roofY, tint: Math.random() });
+      x += bw + (Math.random() < 0.4 ? 2 : 4);
+    }
+    CITYW = x;
+    return c;
+  }
+  function resize() {
+    W = cv.clientWidth || 300; H = cv.clientHeight || 200;
+    cv.width = Math.max(48, Math.floor(W / PX)); cv.height = Math.max(32, Math.floor(H / PX));
+    W = cv.width; H = cv.height; city = makeCity();
+  }
+  function px(x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h))); }
+  function drawSky(offset) {
+    for (let y = 0; y < H; y++) { const t = y / H; const c = t < 0.58 ? skyLo : (t < 0.66 ? skyHi : '#131939'); ctx.fillStyle = c; ctx.fillRect(0, y, W, 1); }
+    ctx.fillStyle = '#cfd6ff';
+    for (let i = 0; i < 16; i++) { const sx = (i * 37 + offset) % (W + 2) - 1; const sy = (i * 53 % Math.floor(H * 0.55)); ctx.fillRect(sx, sy, 1, 1); }
+    ctx.fillStyle = '#e8ecff'; ctx.fillRect(Math.floor(W * 0.8), 7, 6, 6); ctx.fillStyle = skyLo; ctx.fillRect(Math.floor(W * 0.81), 7, 3, 3);
+  }
+  function drawCity(offset) {
+    const o = ((Math.floor(offset) % CITYW) + CITYW) % CITYW;
+    for (const b of city) {
+      let x = b.x - o; if (x < -b.w) x += CITYW; if (x < -b.w || x > W) continue;
+      const body = b.tint > 0.5 ? '#1c2448' : '#161c38';
+      ctx.fillStyle = body; ctx.fillRect(x, b.roofY, b.w, H - b.roofY);
+      ctx.fillStyle = '#262e58'; ctx.fillRect(x, b.roofY, 1, H - b.roofY);
+      ctx.fillStyle = '#0d1226'; ctx.fillRect(x + b.w - 1, b.roofY, 1, H - b.roofY);
+      ctx.fillStyle = b.tint > 0.5 ? '#21294f' : '#10152c'; ctx.fillRect(x, b.roofY, b.w, 2);
+      if (b.tint > 0.75) { ctx.fillStyle = '#3a4472'; ctx.fillRect(x + (b.w >> 1), b.roofY - 4, 1, 4); ctx.fillStyle = '#e02429'; ctx.fillRect(x + (b.w >> 1), b.roofY - 5, 1, 1); }
+      for (let wy = b.roofY + 5; wy < H - 5; wy += 4) { for (let wx = b.w * 0.25 | 0; wx < b.w - 1; wx += 3) { if ((wx * 7 + wy * 13) % 9 === 0) continue; ctx.fillStyle = winOn; ctx.fillRect(x + wx, wy, 1, 1); } }
+    }
+  }
+  const SPAN = () => Math.floor(W * 0.55), TOPY = 6, WLEN = () => Math.floor(H * 0.52);
+  function wrap(x) { x %= W; if (x < 0) x += W; return Math.round(x); }
+  function drawTower(tx) {
+    const tw = 14;
+    ctx.fillStyle = '#252c54'; ctx.fillRect(tx, TOPY, tw, H - TOPY);
+    ctx.fillStyle = '#2f3766'; ctx.fillRect(tx, TOPY, 1, H - TOPY);
+    ctx.fillStyle = '#0e1329'; ctx.fillRect(tx + tw - 1, TOPY, 1, H - TOPY);
+    ctx.fillStyle = '#3a4472'; ctx.fillRect(tx + (tw >> 1), TOPY - 5, 1, 5); ctx.fillStyle = '#e02429'; ctx.fillRect(tx + (tw >> 1), TOPY - 8, 1, 3);
+    for (let wy = TOPY + 5; wy < H - 5; wy += 4) { for (let wx = 3; wx < tw - 2; wx += 4) { if ((wx + wy) % 7 === 0) continue; ctx.fillStyle = winOn; ctx.fillRect(tx + wx, wy, 1, 1); } }
+    return tx + (tw >> 1);
+  }
+  function drawWebLine(x1, y1, x2, y2) {
+    ctx.strokeStyle = '#e6ecff'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  }
+  function drawSpidey(x, y, angle) {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
+    ctx.fillStyle = '#d9181e'; ctx.fillRect(-1, -6, 1, 3); ctx.fillRect(0, -7, 1, 3);
+    ctx.fillStyle = '#e62429'; ctx.fillRect(-2, -5, 4, 3);
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(-1, -4, 1, 1); ctx.fillRect(1, -4, 1, 1);
+    ctx.fillStyle = '#e62429'; ctx.fillRect(-2, -2, 4, 4);
+    ctx.fillStyle = '#3d5af1'; ctx.fillRect(-3, 2, 2, 3); ctx.fillRect(1, 2, 2, 3);
+    ctx.fillStyle = '#d0262b'; ctx.fillRect(-2, 1, 1, 2); ctx.fillRect(1, 1, 1, 2);
+    ctx.restore();
+  }
+  const CYCLE = 170;
+  const HOME = Math.floor(W * 0.22);
+  const THMAXA = 1.15;
+  function frame() {
+    TOR = (TOR + 1);
+    const cycle = Math.floor(TOR / CYCLE);
+    const p = (TOR % CYCLE) / CYCLE;
+    const A = HOME + cycle * SPAN();
+    const B = A + SPAN();
+    const ax = wrap(A), bx = wrap(B);
+    let sx, sy, angle = 0, webFrom = null, webTo = null;
+    if (p < 0.55) {
+      const u = p / 0.55;
+      const th = -THMAXA + u * 2 * THMAXA;
+      const len = WLEN();
+      const rx = A + len * Math.sin(th);
+      const ry = TOPY + len * Math.cos(th);
+      sx = wrap(rx); sy = Math.round(ry); angle = -th * 0.85;
+      webFrom = [ax, TOPY - 6]; webTo = [sx, sy];
+    } else if (p < 0.68) {
+      const u = (p - 0.55) / 0.13;
+      const axx = A + WLEN() * Math.sin(THMAXA);
+      const ayy = TOPY + WLEN() * Math.cos(THMAXA);
+      const rx = axx + u * Math.round(W * 0.22);
+      const ry = ayy - u * WLEN() * 0.6 + u * u * WLEN() * 1.6;
+      sx = wrap(rx); sy = Math.round(ry); angle = Math.sin(u * 4) * 0.55;
+    } else if (p < 0.85) {
+      const u = (p - 0.68) / 0.17;
+      const qx = A + WLEN() * Math.sin(THMAXA) + Math.round(W * 0.22);
+      const qy = TOPY + WLEN() * Math.cos(THMAXA) - WLEN() * 0.6 + WLEN() * 1.6;
+      const rx = qx + (B - qx) * u;
+      const ry = qy + (TOPY - qy) * u;
+      sx = wrap(rx); sy = Math.round(ry); angle = Math.cos(u * 3.2) * 0.35;
+      webFrom = [sx, sy]; webTo = [bx, TOPY - 6];
+    } else {
+      const u = (p - 0.85) / 0.15;
+      const lx = B - WLEN() * Math.sin(THMAXA);
+      const ly = TOPY + WLEN() * Math.cos(THMAXA);
+      const rx = B + (lx - B) * u;
+      const ry = TOPY + (ly - TOPY) * u;
+      sx = wrap(rx); sy = Math.round(ry); angle = -0.4 * (1 - u);
+    }
+    drawSky(0);
+    drawCity(0);
+    const axx = drawTower(ax);
+    drawTower(bx);
+    if (webFrom && webTo) drawWebLine(webFrom[0], webFrom[1], webTo[0], webTo[1]);
+    ctx.strokeStyle = 'rgba(230,238,255,.18)';
+    for (let i = 0; i < 3; i++) {
+      const lx = (i * 13 + TOR) % W;
+      ctx.beginPath(); ctx.moveTo(lx, (i * 23) % H); ctx.lineTo(lx + 6 - i * 2, (i * 23 + 4) % H); ctx.stroke();
+    }
+    drawSpidey(sx, sy, angle);
+    requestAnimationFrame(frame);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+  requestAnimationFrame(frame);
+})();
+
+window.addEventListener('pywebviewready', () => {
+  loadConnectionInfo();
+  loadUrl();
+  loadSpotify();
+  refreshFiles();
+});
+</script>
+</body>
+</html>
+
