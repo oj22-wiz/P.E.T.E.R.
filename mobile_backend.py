@@ -381,7 +381,21 @@ def health() -> dict:
         "agent_id": os.getenv("AGENT_ID", "peter-assistant") or "peter-assistant",
         "room": ROOM,
         "worker_running": _worker_running(),
+        "worker_pid": _worker_pid(),
     }
+
+
+@app.get("/worker-log", include_in_schema=False)
+def worker_log() -> dict:
+    """Return the tail of the embedded worker's log so you can see why it might
+    not be talking. Open `https://<your-app>.onrender.com/worker-log` to check.
+    """
+    try:
+        with open(_worker_log_path(), "r", encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+        return {"ok": True, "running": _worker_running(), "tail": "".join(lines[-60:])}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e), "running": _worker_running()}
 
 
 def _lan_ip() -> str:
@@ -423,30 +437,31 @@ def _worker_lock_path() -> str:
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), ".peter_worker.lock")
 
 
-def _worker_running() -> bool:
-    """Return True if an `agent.py` LiveKit worker is already running.
+def _worker_log_path() -> str:
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), ".peter_worker.log")
 
-    Works on Windows and Linux/macOS: matches any process whose command line
-    contains agent.py and whose executable name looks like a Python/sys.py
-    interpreter.
-    """
-    try:
-        import psutil
-        for proc in psutil.process_iter(["name", "cmdline"]):
-            try:
-                cmdline = proc.info.get("cmdline") or []
-                name = (proc.info.get("name") or "").lower()
-                if not any(p.lower().find("agent.py") >= 0 for p in cmdline):
-                    continue
-                # Match python interpreters across platforms.
-                if not any(tok in name for tok in ("python", "pypy")):
-                    continue
-                return True
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                continue
-    except Exception:
-        pass
+
+# Global handle to the embedded worker process so we can check/restart it.
+_worker_proc = None
+_worker_proc_lock = threading.Lock()
+
+
+def _worker_running() -> bool:
+    """Return True if the embedded `agent.py` worker process is alive."""
+    with _worker_proc_lock:
+        p = _worker_proc
+        if p is not None and p.poll() is None:
+            return True
     return False
+
+
+def _worker_pid() -> int:
+    """Return the embedded worker's PID (0 if not running)."""
+    with _worker_proc_lock:
+        p = _worker_proc
+        if p is not None and p.poll() is None:
+            return p.pid
+    return 0
 
 
 def _minimized_startupinfo():
@@ -459,66 +474,79 @@ def _minimized_startupinfo():
         return None
 
 
-def _ensure_peter_worker() -> None:
-    """Start the agent worker automatically if it's not already running.
+def _launch_worker() -> subprocess.Popen:
+    """Launch the agent worker, teeing its output to a log file.
 
-    On Windows spawns it in a minimized console window. On Linux/macOS local
-    it runs as a normal background child of this process. Uses a lock file so
-    only one worker is ever launched, even if multiple processes race to start
-    it.
-
-    In cloud mode (Render/Railway/Fly), we recommend a DEDICATED worker
-    service (see render.yaml) instead of an embedded child process, because a
-    child that crashes on startup (e.g. missing GOOGLE_API_KEY) silently kills
-    voice. Set EMBEDDED_WORKER=0 on the web service so it never spawns the
-    worker here — the separate worker service handles it.
+    We direct stdout/stderr to `.peter_worker.log` so that if the worker
+    fails to start we can read the real error (via /worker-log) instead of
+    guessing. Returns the Popen handle.
     """
-    import subprocess
-    import sys
+    global _worker_proc
+    log_f = open(_worker_log_path(), "a", encoding="utf-8", buffering=1)
+    log_f.write("\n" + "=" * 50 + f"\n[worker boot {time.strftime('%H:%M:%S')}]\n")
+    log_f.flush()
 
-    # In cloud with a dedicated worker service, never spawn an embedded worker.
-    if os.getenv("EMBEDDED_WORKER", "").strip().lower() in ("0", "false", "no"):
-        return
-
-    if _worker_running():
-        return
-
-    lock_path = _worker_lock_path()
-    try:
-        if os.path.exists(lock_path):
-            os.remove(lock_path)
-    except OSError:
-        pass
-
-    try:
-        lock_fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-    except FileExistsError:
-        return
-
-    # Platform-specific Popen kwargs (Windows may hide/minimize the console).
     kwargs = {}
     if os.name == "nt":
         kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
         kwargs["startupinfo"] = _minimized_startupinfo()
+    kwargs["stdout"] = log_f
+    kwargs["stderr"] = subprocess.STDOUT
 
-    try:
-        proc = subprocess.Popen(
-            [_venv_python(), "agent.py", "dev"],
-            cwd=os.path.dirname(os.path.abspath(__file__)),
-            **kwargs,
-        )
-        os.write(lock_fd, str(proc.pid).encode())
-        os.close(lock_fd)
-        print("  +++ Peter voice worker auto-started +++")
-    except Exception as e:  # noqa: BLE001
-        print(f"  Could not auto-start worker: {e}")
+    proc = subprocess.Popen(
+        [_venv_python(), "agent.py", "dev"],
+        cwd=os.path.dirname(os.path.abspath(__file__)),
+        **kwargs,
+    )
+    _worker_proc = proc
+    return proc
+
+
+def _ensure_peter_worker() -> None:
+    """Start the agent worker automatically and keep it alive.
+
+    Launches the agent worker if it isn't running. In local/desktop mode a
+    minimized console is used. In a cloud container it runs as a direct child
+    of this process with its output logged. A separate watchdog re-launches it
+    if it ever exits, so the phone always has a Peter to connect to.
+    """
+    if opt_out_of_worker():
+        return
+
+    with _worker_proc_lock:
+        if _worker_running():
+            return
         try:
-            os.close(lock_fd)
-        except OSError:
-            pass
+            _launch_worker()
+            print("  +++ Peter voice worker auto-started +++")
+        except Exception as e:  # noqa: BLE001
+            print(f"  Could not auto-start worker: {e}")
+
+
+def opt_out_of_worker() -> bool:
+    """True when a dedicated worker service is expected to run agent.py."""
+    return os.getenv("EMBEDDED_WORKER", "").strip().lower() in ("0", "false", "no")
+
+
+def _worker_watchdog() -> None:
+    """Periodically restart the embedded worker if it has exited.
+
+    This is the key reliability fix for a single-container deploy: if the
+    agent crashes (e.g. a transient LiveKit error or a missing key was
+    temporarily an issue), we bring it right back so your phone can always
+    connect — instead of silently staying down.
+    """
+    while True:
+        time.sleep(5)
         try:
-            os.remove(lock_path)
-        except OSError:
+            if opt_out_of_worker():
+                return
+            with _worker_proc_lock:
+                p = _worker_proc
+                alive = p is not None and p.poll() is None
+            if not alive:
+                _ensure_peter_worker()
+        except Exception:  # noqa: BLE001
             pass
 
 
@@ -532,6 +560,13 @@ if __name__ == "__main__":
     # Start Peter's voice worker automatically so the phone can reach him
     # without the desktop app being open (works in a cloud container too).
     _ensure_peter_worker()
+    # Watchdog: keep re-spawning the worker if it ever exits, so the phone
+    # always has a Peter to connect to even on a fragile free container.
+    try:
+        t = threading.Thread(target=_worker_watchdog, daemon=True)
+        t.start()
+    except Exception:  # noqa: BLE001
+        pass
     if os.getenv("PORT"):
         print(f"  CLOUD MODE: serving on 0.0.0.0:{port} (public URL below)")
         print(f"  PUBLIC_URL   : {os.getenv('PUBLIC_URL', 'set PUBLIC_URL')}")

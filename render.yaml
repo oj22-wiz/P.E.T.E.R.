@@ -1,20 +1,19 @@
 # P.E.T.E.R. — Render Blueprint
-# TWO services that together serve the PWA + API + run the Peter voice worker:
 #
-#   1. `peter`        (web)    -> serves the phone UI + backend API (mobile_backend.py)
-#   2. `peter-worker` (worker) -> runs the LiveKit agent (agent.py) that Peter's
-#                                 voice actually comes from.
+# SINGLE web service that runs BOTH the phone-facing backend AND the Peter
+# voice worker inside the same container. This is required for Render's FREE
+# tier, which does NOT keep Background Worker services alive.
 #
-# This is the standard, RELIABLE LiveKit deployment pattern. The worker is a
-# first-class process that Render restarts automatically if it crashes — far
-# more reliable than trying to spawn it as a child of the web process.
+# The web process (python mobile_backend.py) starts UVICORN for the API and
+# ALSO launches the Peter voice worker (python agent.py dev) as a managed
+# child process. If that child crashes, the backend automatically restarts it
+# and exposes /health + /worker-log so you can see exactly what's wrong.
 #
 # Deploy: push this repo to GitHub, then on render.com click
 #   "New -> Blueprint" and select the repo. It auto-reads this file.
-# Then set the 5 secret env vars (see below) in BOTH services' dashboards.
+# Then set the secret env vars (see below) in the Service -> Environment tab.
 
 services:
-  # ── Web: the phone-facing app (UI + API + token endpoint) ─────────────
   - type: web
     name: peter
     runtime: docker
@@ -24,60 +23,34 @@ services:
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health
     autoDeploy: true
-    # Web service runs the FastAPI backend (serves UI + API + tokens).
-    # EMBEDDED_WORKER=0 stops the backend from also spawning a child worker —
-    # the dedicated worker service below is the one that runs agent.py.
+    # Runs the FastAPI backend, which in turn starts (and keeps alive) the
+    # embedded Peter voice worker. Must stay EMBEDDED_WORKER=1 on Render free.
     startCommand: python mobile_backend.py
     envVars:
+      # Keep the voice worker running inside this same web container.
       - key: EMBEDDED_WORKER
-        value: "0"
+        value: "1"
       # LiveKit
       - key: LIVEKIT_URL
         value: wss://project-p-e-t-e-r-b7e84u03.livekit.cloud
       - key: LIVEKIT_API_KEY
-        sync: false
+        sync: false        # SET THIS in the Render dashboard (secret)
       - key: LIVEKIT_API_SECRET
-        sync: false
-      # Google AI / Gemini Realtime (required for speech)
+        sync: false        # SET THIS in the Render dashboard (secret)
+      # Google AI / Gemini Realtime (REQUIRED — without it Peter cannot speak)
       - key: GOOGLE_API_KEY
-        sync: false
-      # Agent name (must match the worker's agent, default peter-assistant)
+        sync: false        # SET THIS in the Render dashboard (secret)
+      # Agent name (must match the token dispatch)
       - key: AGENT_ID
         value: peter-assistant
-      # Spotify (set client id/secret as secrets)
+      # Spotify (optional — only needed for "play my music")
       - key: SPOTIFY_CLIENT_ID
         sync: false
       - key: SPOTIFY_CLIENT_SECRET
         sync: false
-      # Render injects PORT automatically; backend reads it.
-      - key: PORT
-        value: 10000
-
-  # ── Worker: the LiveKit agent that actually talks to Peter ────────────
-  - type: worker
-    name: peter-worker
-    runtime: docker
-    plan: free
-    region: oregon
-    rootDir: .
-    dockerfilePath: ./Dockerfile
-    autoDeploy: true
-    # The worker runs the LiveKit agent that joins the room and speaks.
-    startCommand: python agent.py dev
-    envVars:
-      # LiveKit
-      - key: LIVEKIT_URL
-        value: wss://project-p-e-t-e-r-b7e84u03.livekit.cloud
-      - key: LIVEKIT_API_KEY
-        sync: false
-      - key: LIVEKIT_API_SECRET
-        sync: false
-      # Google AI / Gemini Realtime (required for speech)
-      - key: GOOGLE_API_KEY
-        sync: false
-      # Agent name — must match the name used in the token dispatch.
-      - key: AGENT_ID
-        value: peter-assistant
       # Optional: Mem0 cloud memory so Peter remembers you across redeploys.
       - key: MEM0_API_KEY
         sync: false
+      # Render injects PORT automatically; the backend reads it.
+      - key: PORT
+        value: 10000
