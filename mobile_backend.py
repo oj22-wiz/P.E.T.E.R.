@@ -367,6 +367,23 @@ def sw() -> FileResponse:
     return FileResponse(_MOBILE_DIR / "sw.js")
 
 
+@app.get("/health", include_in_schema=False)
+def health() -> dict:
+    """Diagnostics: tells you whether the required keys are set and whether
+    the Peter voice worker is actually running inside the container. Open
+    `https://<your-app>.onrender.com/health` in your browser to check."""
+    return {
+        "status": "ok",
+        "livekit_url": LIVEKIT_URL,
+        "livekit_keys_set": bool(LIVEKIT_API_KEY and LIVEKIT_API_SECRET),
+        "google_key_set": bool((os.getenv("GOOGLE_API_KEY") or "").strip()),
+        "spotify_client_set": bool((os.getenv("SPOTIFY_CLIENT_ID") or "").strip()),
+        "agent_id": os.getenv("AGENT_ID", "peter-assistant") or "peter-assistant",
+        "room": ROOM,
+        "worker_running": _worker_running(),
+    }
+
+
 def _lan_ip() -> str:
     """Return this PC's primary LAN IP (for the phone to connect to)."""
     try:
@@ -445,13 +462,23 @@ def _minimized_startupinfo():
 def _ensure_peter_worker() -> None:
     """Start the agent worker automatically if it's not already running.
 
-    On Windows spawns it in a minimized console window. On Linux/macOS (cloud)
+    On Windows spawns it in a minimized console window. On Linux/macOS local
     it runs as a normal background child of this process. Uses a lock file so
     only one worker is ever launched, even if multiple processes race to start
     it.
+
+    In cloud mode (Render/Railway/Fly), we recommend a DEDICATED worker
+    service (see render.yaml) instead of an embedded child process, because a
+    child that crashes on startup (e.g. missing GOOGLE_API_KEY) silently kills
+    voice. Set EMBEDDED_WORKER=0 on the web service so it never spawns the
+    worker here — the separate worker service handles it.
     """
     import subprocess
     import sys
+
+    # In cloud with a dedicated worker service, never spawn an embedded worker.
+    if os.getenv("EMBEDDED_WORKER", "").strip().lower() in ("0", "false", "no"):
+        return
 
     if _worker_running():
         return

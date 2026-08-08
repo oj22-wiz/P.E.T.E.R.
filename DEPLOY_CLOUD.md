@@ -17,11 +17,20 @@ This turns your mobile P.E.T.E.R. into a **single public web app** that:
 
 | File | Purpose |
 |------|---------|
-| `Dockerfile` | Builds one container with the backend + worker + deps. |
+| `Dockerfile` | Builds one container image (used by both services). |
 | `.dockerignore` | Keeps secrets/local state out of the image. |
-| `render.yaml` | Render Blueprint that wires up the env vars for you. |
-| `mobile_backend.py` | FastAPI server (already cloud-aware: reads `PORT`). |
+| `render.yaml` | Render Blueprint that creates **two** services. |
+| `mobile_backend.py` | FastAPI server (web service, reads `PORT`). |
+| `agent.py` | The LiveKit voice worker (worker service). |
 | `mobile/` | The installable PWA shell. |
+
+Render creates **two services** from the one repo:
+- **`peter` (web)** — serves the phone UI + API + LiveKit token endpoint.
+- **`peter-worker` (worker)** — runs `agent.py`, the LiveKit agent that
+  Peter's voice actually comes from.
+
+This is the reliable LiveKit pattern: if the worker crashes, Render restarts
+it on its own — your phone never depends on a fragile child process.
 
 ---
 
@@ -29,15 +38,16 @@ This turns your mobile P.E.T.E.R. into a **single public web app** that:
 
 1. **Push this folder to a GitHub repo** (Render needs a repo).
 2. On [render.com](https://render.com) click **New → Blueprint** and select
-   that repo. Render auto-reads `render.yaml` and creates a `peter` web
-   service (Docker).
-3. **Set the secret env vars** in the Render dashboard (Service → Environment):
+   that repo. Render auto-reads `render.yaml` and creates both the `peter` web
+   service and the `peter-worker` worker service.
+3. **Set the secret env vars** in the Render dashboard for **BOTH** services
+   (Service → Environment):
    - `LIVEKIT_API_KEY`
    - `LIVEKIT_API_SECRET`
    - `GOOGLE_API_KEY`
-   - `SPOTIFY_CLIENT_ID`
-   - `SPOTIFY_CLIENT_SECRET`
-   - optional `MEM0_API_KEY` (for persistent cloud memory)
+   - `SPOTIFY_CLIENT_ID` (web only)
+   - `SPOTIFY_CLIENT_SECRET` (web only)
+   - optional `MEM0_API_KEY` (worker, for persistent cloud memory)
 4. **Find your app's public URL** — Render shows it after the first deploy.
    It looks like `https://peter-xxxx.onrender.com`.
 5. **Register the redirect URI in Spotify**: In the
@@ -68,8 +78,9 @@ open the public URL on your phone.
   Peter to remember you across redeploys, set `MEM0_API_KEY` (Mem0 cloud).
 - **Spotify playback** uses Spotify Connect, so it plays on whatever device
   has Spotify open (your phone, etc.).
-- The **worker runs inside the same container** as the web server, so there's
-  genuinely one process and one link.
+- The **worker runs as its own service** (`peter-worker`), so Render keeps it
+  alive independently and restarts it automatically if it ever stops — your
+  phone always has a Peter to connect to.
 
 ---
 

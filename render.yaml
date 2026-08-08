@@ -1,15 +1,20 @@
 # P.E.T.E.R. — Render Blueprint
-# One web service that serves the PWA + API + runs the Peter worker.
-# Deploy: push this repo to GitHub, then in Render click
-#   "New -> Blueprint" and point it at this repo (it auto-reads render.yaml).
+# TWO services that together serve the PWA + API + run the Peter voice worker:
 #
-# After deploy, set the 5 secret env vars (LIVEKIT_API_KEY, LIVEKIT_API_SECRET,
-# GOOGLE_API_KEY, SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET) in the Render
-# dashboard, then register the /spotify/callback redirect URI in Spotify.
-# The Spotify redirect URI and public URL are auto-derived from the request,
-# so there are NO placeholders to edit here.
+#   1. `peter`        (web)    -> serves the phone UI + backend API (mobile_backend.py)
+#   2. `peter-worker` (worker) -> runs the LiveKit agent (agent.py) that Peter's
+#                                 voice actually comes from.
+#
+# This is the standard, RELIABLE LiveKit deployment pattern. The worker is a
+# first-class process that Render restarts automatically if it crashes — far
+# more reliable than trying to spawn it as a child of the web process.
+#
+# Deploy: push this repo to GitHub, then on render.com click
+#   "New -> Blueprint" and select the repo. It auto-reads this file.
+# Then set the 5 secret env vars (see below) in BOTH services' dashboards.
 
 services:
+  # ── Web: the phone-facing app (UI + API + token endpoint) ─────────────
   - type: web
     name: peter
     runtime: docker
@@ -17,35 +22,62 @@ services:
     region: oregon
     rootDir: .
     dockerfilePath: ./Dockerfile
-    healthCheckPath: /
+    healthCheckPath: /health
     autoDeploy: true
+    # Web service runs the FastAPI backend (serves UI + API + tokens).
+    # EMBEDDED_WORKER=0 stops the backend from also spawning a child worker —
+    # the dedicated worker service below is the one that runs agent.py.
+    startCommand: python mobile_backend.py
     envVars:
-      # LiveKit (same keys as your local .env)
+      - key: EMBEDDED_WORKER
+        value: "0"
+      # LiveKit
       - key: LIVEKIT_URL
         value: wss://project-p-e-t-e-r-b7e84u03.livekit.cloud
       - key: LIVEKIT_API_KEY
-        sync: false            # set in the Render dashboard (secret)
+        sync: false
       - key: LIVEKIT_API_SECRET
         sync: false
       # Google AI / Gemini Realtime (required for speech)
       - key: GOOGLE_API_KEY
         sync: false
-      # Agent name (must match your LiveKit agent deployment)
+      # Agent name (must match the worker's agent, default peter-assistant)
       - key: AGENT_ID
         value: peter-assistant
-# Spotify (set client id/secret as secrets in the dashboard)
+      # Spotify (set client id/secret as secrets)
       - key: SPOTIFY_CLIENT_ID
         sync: false
       - key: SPOTIFY_CLIENT_SECRET
         sync: false
-      # Optional: set MEM0_API_KEY for persistent cloud memory across
-      # redeploys (local ./memory_store is ephemeral on free Render).
-      - key: MEM0_API_KEY
-        sync: false
-      # Render injects PORT=10000 automatically; the backend reads it below.
-      # NOTE: SPOTIFY_REDIRECT_URI and PUBLIC_URL are AUTO-DERIVED from the
-      # request URL at runtime, so you do NOT need to set them. You only need
-      # to register the redirect URI once in the Spotify dashboard (see
-      # DEPLOY_CLOUD.md).
+      # Render injects PORT automatically; backend reads it.
       - key: PORT
         value: 10000
+
+  # ── Worker: the LiveKit agent that actually talks to Peter ────────────
+  - type: worker
+    name: peter-worker
+    runtime: docker
+    plan: free
+    region: oregon
+    rootDir: .
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
+    # The worker runs the LiveKit agent that joins the room and speaks.
+    startCommand: python agent.py dev
+    envVars:
+      # LiveKit
+      - key: LIVEKIT_URL
+        value: wss://project-p-e-t-e-r-b7e84u03.livekit.cloud
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
+      # Google AI / Gemini Realtime (required for speech)
+      - key: GOOGLE_API_KEY
+        sync: false
+      # Agent name — must match the name used in the token dispatch.
+      - key: AGENT_ID
+        value: peter-assistant
+      # Optional: Mem0 cloud memory so Peter remembers you across redeploys.
+      - key: MEM0_API_KEY
+        sync: false
