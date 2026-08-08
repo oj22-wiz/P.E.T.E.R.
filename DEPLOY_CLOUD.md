@@ -38,13 +38,13 @@ This turns your mobile P.E.T.E.R. into a **single public web app** that:
    - `SPOTIFY_CLIENT_ID`
    - `SPOTIFY_CLIENT_SECRET`
    - optional `MEM0_API_KEY` (for persistent cloud memory)
-4. **Fix the two `YOUR-APP` placeholders** in `render.yaml`:
-   - `SPOTIFY_REDIRECT_URI` → `https://<your-app>.onrender.com/spotify/callback`
-   - `PUBLIC_URL` → `https://<your-app>.onrender.com`
+4. **Find your app's public URL** — Render shows it after the first deploy.
+   It looks like `https://peter-xxxx.onrender.com`.
 5. **Register the redirect URI in Spotify**: In the
    [Spotify dashboard](https://developer.spotify.com/dashboard) for your app,
    add exactly `https://<your-app>.onrender.com/spotify/callback` as a
-   Redirect URI and Save.
+   Redirect URI and Save. (The app auto-derives this redirect URI from the
+   request — there are no placeholders to edit in `render.yaml`.)
 6. Let Render deploy. When it's healthy, open `https://<your-app>.onrender.com`
    on your iPhone → **Share → Add to Home Screen**.
 
