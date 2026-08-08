@@ -243,21 +243,42 @@ async def spotify_set_default(request: Request) -> dict:
     return {"ok": True}
 
 
+def _request_base_url(request: Request) -> str:
+    """Derive this app's public base URL from the incoming request.
+
+    When served behind Render/Railway/Fly (which terminate TLS and set
+    X-Forwarded-Proto), this returns e.g. https://my-app.onrender.com. Falls
+    back to PUBLIC_URL, then to the request's own host.
+    """
+    forwarded = request.headers.get("x-forwarded-proto", "")
+    if forwarded.startswith("http"):
+        # Use the forwarded scheme + the request Host to build the public origin.
+        return f"{forwarded.split(',')[0].strip()}://{request.base_url.netloc}"
+    public = os.getenv("PUBLIC_URL", "").strip().rstrip("/")
+    if public:
+        return public
+    base = request.base_url
+    return f"{base.scheme}://{base.netloc}"
+
+
 @app.get("/spotify/auth_url")
-def spotify_auth_url() -> dict:
+def spotify_auth_url(request: Request) -> dict:
     """Return the Spotify authorization URL for the caller to open.
 
     Used on a public (cloud) deployment: the phone opens this URL in a new
     tab, the user approves, and Spotify redirects back to /spotify/callback.
+    The Redirect URI is derived automatically from this request's public URL,
+    so you never have to hardcode your app's domain anywhere.
     """
     try:
-        return {"ok": True, "auth_url": spotify_auth.get_authorize_url()}
+        base = _request_base_url(request)
+        return {"ok": True, "auth_url": spotify_auth.get_authorize_url(base)}
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "error": str(e)}
 
 
 @app.get("/spotify/callback")
-def spotify_callback(code: str = "", error: str = "") -> HTMLResponse:
+def spotify_callback(request: Request, code: str = "", error: str = "") -> HTMLResponse:
     """Handle the Spotify OAuth redirect for public (cloud) deployments.
 
     This is the Redirect URI you register in the Spotify dashboard as
@@ -265,7 +286,8 @@ def spotify_callback(code: str = "", error: str = "") -> HTMLResponse:
     for a refresh token and show a friendly "done" page; the PWA then refresh
     its /spotify status (polling) to pick up the newly-authorized state.
     """
-    ok = bool(code) and not error and spotify_auth.handle_callback(code)
+    base = _request_base_url(request)
+    ok = bool(code) and not error and spotify_auth.handle_callback(code, base)
     msg = (
         "🎉 Peter connected to Spotify! You can close this tab."
         if ok

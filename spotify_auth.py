@@ -278,31 +278,50 @@ def get_client() -> spotipy.Spotify:
 # ──────────────────────────────────────────────────────────────
 # Cloud / public-URL OAuth helpers
 # ──────────────────────────────────────────────────────────────
-def get_authorize_url() -> str:
+def resolve_redirect_uri(base_url: str = "") -> str:
+    """Resolve the Spotify Redirect URI for the current deployment.
+
+    On a local machine this returns the loopback callback
+    (http://127.0.0.1:9090/callback). On a deployed (cloud) app, pass the
+    app's public base URL (e.g. https://my-app.onrender.com) and it returns
+    https://my-app.onrender.com/spotify/callback automatically. Prefers the
+    caller-provided base_url, then PUBLIC_URL, then the local default.
+    """
+    base = (base_url or "").strip().rstrip("/")
+    if not base:
+        base = os.getenv("PUBLIC_URL", "").strip().rstrip("/")
+    if base:
+        return f"{base}/spotify/callback"
+    return os.getenv("SPOTIFY_REDIRECT_URI", DEFAULT_REDIRECT).strip() or DEFAULT_REDIRECT
+
+
+def get_authorize_url(base_url: str = "") -> str:
     """Return the Spotify authorization URL the user opens in their browser.
 
-    Use this on a deployed (cloud) backend where the Redirect URI is a public
-    HTTPS endpoint served by the app (e.g. https://myapp.onrender.com/callback)
-    rather than a local loopback. The user logs into Spotify, approves, and
-    Spotify redirects to the app's /callback route, which then calls
-    handle_callback(code).
+    `base_url` (the app's public origin) is used to build the Redirect URI so
+    the deployed app never needs a hardcoded SPOTIFY_REDIRECT_URI. The user
+    logs into Spotify, approves, and Spotify redirects to
+    <base_url>/spotify/callback, which calls handle_callback(code).
     """
-    sp_oauth = _build_auth()
+    redirect = resolve_redirect_uri(base_url)
+    logging.info(f"Spotify Redirect URI: {redirect}")
+    sp_oauth = _build_auth(redirect=redirect)
     return sp_oauth.get_authorize_url()
 
 
-def handle_callback(code: str) -> bool:
+def handle_callback(code: str, base_url: str = "") -> bool:
     """Exchange an authorization `code` for tokens and persist them.
 
     Designed for the cloud flow: the backend's /spotify/callback endpoint
-    receives `?code=...`, calls this, and the refresh token is saved to
-    spotify_token.json (same place the desktop flow writes it), so the worker
-    shares the same auth state regardless of where it's running.
+    receives `?code=...`, calls this with the same base_url, the token is
+    saved to spotify_token.json (same place the desktop flow writes it), so
+    the worker shares the same auth state regardless of where it's running.
     """
     if not code:
         return False
     try:
-        sp_oauth = _build_auth()
+        redirect = resolve_redirect_uri(base_url)
+        sp_oauth = _build_auth(redirect=redirect)
         token_info = sp_oauth.get_access_token(code)
         if isinstance(token_info, dict):
             _persist_token(token_info)

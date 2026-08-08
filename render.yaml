@@ -3,9 +3,11 @@
 # Deploy: push this repo to GitHub, then in Render click
 #   "New -> Blueprint" and point it at this repo (it auto-reads render.yaml).
 #
-# After deploy, set the two Spotify variables exactly as shown below
-# (replace YOUR-APP with your actual *.onrender.com URL) and re-register the
-# redirect URI in the Spotify dashboard.
+# After deploy, set the 5 secret env vars (LIVEKIT_API_KEY, LIVEKIT_API_SECRET,
+# GOOGLE_API_KEY, SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET) in the Render
+# dashboard, then register the /spotify/callback redirect URI in Spotify.
+# The Spotify redirect URI and public URL are auto-derived from the request,
+# so there are NO placeholders to edit here.
 
 services:
   - type: web
@@ -31,24 +33,19 @@ services:
       # Agent name (must match your LiveKit agent deployment)
       - key: AGENT_ID
         value: peter-assistant
-      # Spotify (set client id/secret as secrets in the dashboard)
+# Spotify (set client id/secret as secrets in the dashboard)
       - key: SPOTIFY_CLIENT_ID
         sync: false
       - key: SPOTIFY_CLIENT_SECRET
         sync: false
-      # CRITICAL: Spotify only allows exact registered redirect URIs.
-      # Replace YOUR-APP with your app's real URL, e.g.
-      #   https://peter.onrender.com/spotify/callback
-      # then add the SAME URI in the Spotify dashboard for this Client ID.
-      - key: SPOTIFY_REDIRECT_URI
-        value: https://YOUR-APP.onrender.com/spotify/callback
-      # Optional: used only to build links in messages.
-      - key: PUBLIC_URL
-        value: https://YOUR-APP.onrender.com
       # Optional: set MEM0_API_KEY for persistent cloud memory across
       # redeploys (local ./memory_store is ephemeral on free Render).
       - key: MEM0_API_KEY
         sync: false
       # Render injects PORT=10000 automatically; the backend reads it below.
+      # NOTE: SPOTIFY_REDIRECT_URI and PUBLIC_URL are AUTO-DERIVED from the
+      # request URL at runtime, so you do NOT need to set them. You only need
+      # to register the redirect URI once in the Spotify dashboard (see
+      # DEPLOY_CLOUD.md).
       - key: PORT
         value: 10000
