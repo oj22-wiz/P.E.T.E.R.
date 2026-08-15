@@ -260,23 +260,30 @@ def _do_play_uri(client, uri: str, context_name: str) -> str:
         return f"I couldn't start playback: {e}"
 
 
-def _play_uri(client, uri: str, context_name: str) -> str:
-    """Return an immediate acknowledgment and start playback in the background.
+async def _play_uri(client, uri: str, context_name: str) -> str:
+    """Start playback and return what actually happened.
 
-    The tool returns right away so Peter can speak a natural confirmation
-    ("On it — starting your music!") while the actual playback (and any
-    Spotify app launch + ~12s wait) happens in a background thread. This
-    makes the response feel instant and conversational instead of silently
-    waiting through the whole launch.
+    In the cloud deploy _do_play_uri never launches a desktop app (see its
+    own PORT check) so every path it can take — checking for a phone/local/
+    any active device — is a handful of sub-second Spotify API calls. That's
+    fast enough to just await directly and hand Peter the REAL outcome, so
+    he reports what actually happened instead of guessing.
+
+    On desktop, launching the local Spotify app and polling up to ~12s for
+    it to register as a device is slow enough that blocking the whole reply
+    on it would feel broken, so there we keep the old fire-and-forget
+    pattern with an immediate ack — but that meant the actual result was
+    only ever logged, never spoken, so if it silently failed the ack
+    ("On it — starting X now") was the last thing the user heard, and
+    on the cloud path Peter would sometimes go on to invent a false
+    "playing now!" follow-up despite the tool having already failed.
     """
+    if bool(os.getenv("PORT")):
+        return await asyncio.to_thread(_do_play_uri, client, uri, context_name)
+
     import threading
 
     def _run() -> None:
-        # _do_play_uri's return value used to be discarded entirely, so
-        # whether it actually found a device (or why it didn't) was
-        # invisible anywhere — the user just heard the "On it" ack and
-        # then silence with no way to tell success from failure. Logging
-        # it here at least makes the real outcome visible in /worker-log.
         try:
             result = _do_play_uri(client, uri, context_name)
             logging.info(f"play_uri background result: {result}")
@@ -345,7 +352,7 @@ async def play_playlist(
         client, chosen = await asyncio.to_thread(_find)
         if chosen is None:
             return f"I couldn't find a playlist named '{name}'. Ask me to list your playlists."
-        return _play_uri(client, chosen["uri"], chosen["name"])
+        return await _play_uri(client, chosen["uri"], chosen["name"])
     except Exception as e:  # noqa: BLE001
         logging.error(f"play_playlist error: {e}")
         return f"I couldn't play that playlist: {e}"
@@ -377,7 +384,7 @@ async def play_my_music(
         pid = pid.strip()
         if ":" not in pid:
             pid = f"spotify:playlist:{pid}"
-        return _play_uri(client, pid, default["name"])
+        return await _play_uri(client, pid, default["name"])
     except Exception as e:  # noqa: BLE001
         logging.error(f"play_my_music error: {e}")
         return f"I couldn't play your music: {e}"
