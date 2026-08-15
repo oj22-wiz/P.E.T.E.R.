@@ -32,6 +32,7 @@ from livekit.agents import (
     Agent,
     AgentSession,
     JobContext,
+    JobExecutorType,
     JobProcess,
     RunContext,
     WorkerOptions,
@@ -436,12 +437,11 @@ def _prewarm(proc: JobProcess) -> None:
     """Prewarm the Gemini Realtime model at process startup to reduce
     first-join latency.
 
-    Must be a real module-level function, not a lambda: the agents
-    framework spawns each job in its own subprocess (forkserver on Linux)
-    and pickles this callback to hand it to that subprocess. Lambdas have
-    no importable qualified name, so pickling one raises PicklingError and
-    every job spawn fails — the worker stays "running" but can never
-    actually join a room.
+    Must be a real module-level function, not a lambda: with
+    job_executor_type=PROCESS the agents framework would pickle this
+    callback to hand it to each job's subprocess, and lambdas have no
+    importable qualified name — pickling one raises PicklingError. Kept
+    as a real function since it's cheap and executor-agnostic.
     """
     _build_model()
 
@@ -453,6 +453,17 @@ if __name__ == "__main__":
             entrypoint_fnc=entrypoint,
             agent_name=os.getenv("AGENT_ID", "peter-assistant"),
             prewarm_fnc=_prewarm,
+            # Run jobs as threads in this same process, not separate OS
+            # processes. livekit-agents defaults to JobExecutorType.PROCESS
+            # on Linux, which also pre-spawns several idle warm processes —
+            # each re-imports the whole Gemini/audio/mem0 stack. On a small
+            # single-user deploy (e.g. Render's free 512MB tier, where this
+            # worker already shares the container with the FastAPI backend)
+            # that multiplied memory use enough to get the process OOM-killed
+            # mid-job, which looked like the agent silently never joining the
+            # room. There's only ever one user here, so we don't need the
+            # OS-process isolation between jobs that PROCESS mode buys you.
+            job_executor_type=JobExecutorType.THREAD,
         )
     )
 
