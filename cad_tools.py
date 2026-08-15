@@ -14,6 +14,7 @@ automatically.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -103,10 +104,15 @@ async def design_cad_part(
     stl_path = _DESIGNS_DIR / f"{safe_name}.stl"
     png_path = _DESIGNS_DIR / f"{safe_name}.png"
 
+    # subprocess.run blocks for as long as OpenSCAD takes to render — up to
+    # _RENDER_TIMEOUT_SECS (90s). This tool runs on the same event loop as
+    # the live voice session, so calling it directly would freeze Peter's
+    # audio for the whole render. asyncio.to_thread moves it off the loop.
     stl_ok = False
     stl_err = ""
     try:
-        result = subprocess.run(
+        result = await asyncio.to_thread(
+            subprocess.run,
             [openscad, "-o", str(stl_path), str(scad_path)],
             capture_output=True,
             text=True,
@@ -121,7 +127,8 @@ async def design_cad_part(
 
     png_ok = False
     try:
-        subprocess.run(
+        await asyncio.to_thread(
+            subprocess.run,
             [openscad, "--imgsize=800,600", "-o", str(png_path), str(scad_path)],
             capture_output=True,
             text=True,

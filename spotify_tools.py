@@ -13,6 +13,7 @@ PC's Spotify app, a speaker, etc.).
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -283,11 +284,15 @@ async def list_playlists(
     if not is_authorized():
         return "SPOTIFY_NOT_AUTHORIZED"
     try:
-        client = get_client()
-        names = []
-        results = client.current_user_playlists(limit=50)
-        for item in results.get("items", []):
-            names.append(item["name"])
+        # spotipy is synchronous. This tool runs on the same event loop as
+        # the live voice session, so calling it directly would freeze
+        # Peter's audio while it talks to Spotify's API.
+        def _list() -> list:
+            client = get_client()
+            results = client.current_user_playlists(limit=50)
+            return [item["name"] for item in results.get("items", [])]
+
+        names = await asyncio.to_thread(_list)
         if not names:
             return "You don't have any playlists I can see."
         return "Your playlists: " + "; ".join(names)
@@ -307,13 +312,15 @@ async def play_playlist(
     if not is_authorized():
         return "SPOTIFY_NOT_AUTHORIZED"
     try:
-        client = get_client()
-        results = client.current_user_playlists(limit=50)
-        chosen = None
-        for item in results.get("items", []):
-            if item["name"].strip().lower() == name.strip().lower():
-                chosen = item
-                break
+        def _find() -> tuple:
+            client = get_client()
+            results = client.current_user_playlists(limit=50)
+            for item in results.get("items", []):
+                if item["name"].strip().lower() == name.strip().lower():
+                    return client, item
+            return client, None
+
+        client, chosen = await asyncio.to_thread(_find)
         if chosen is None:
             return f"I couldn't find a playlist named '{name}'. Ask me to list your playlists."
         return _play_uri(client, chosen["uri"], chosen["name"])
@@ -340,7 +347,7 @@ async def play_my_music(
             "Open the Spotify menu in the app and choose a playlist, then ask me to play my music."
         )
     try:
-        client = get_client()
+        client = await asyncio.to_thread(get_client)
         pid = default["id"]
         # The desktop UI saves a bare playlist ID. Spotify's start_playback
         # needs a full context URI like "spotify:playlist:<id>", so build it

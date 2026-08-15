@@ -218,8 +218,13 @@ async def get_weather(
     Get the current weather for a given city.
     """
     try:
-        response = requests.get(
-            f"https://wttr.in/{city}?format=3")
+        # requests is synchronous/blocking. This tool runs on the same
+        # event loop as the live voice session (see search_web for the
+        # full explanation), so without to_thread this call would freeze
+        # Peter's audio for however long the request takes.
+        response = await asyncio.to_thread(
+            requests.get, f"https://wttr.in/{city}?format=3"
+        )
         if response.status_code == 200:
             logging.info(f"Weather for {city}: {response.text.strip()}")
             return response.text.strip()
@@ -446,11 +451,18 @@ async def search_web(
     data for current events. Returns dated search snippets PLUS extracted
     content from the top result pages, so you have actual text to cite.
     """
+    # _ddg_search / _extract_page_text are synchronous, blocking network
+    # calls (DDGS + requests). This tool runs on the same event loop as the
+    # live voice session (jobs run as threads, not separate OS processes —
+    # see agent.py's job_executor_type), so calling them directly would
+    # freeze Peter's audio for however long DuckDuckGo + page fetches take
+    # (a real, observed multi-second stall). asyncio.to_thread moves the
+    # blocking work off the event loop so audio keeps streaming.
     out = []
 
     # 1) DuckDuckGo search snippets (reliable DDGS client)
     try:
-        res = _ddg_search(query, max_results=6)
+        res = await asyncio.to_thread(_ddg_search, query, max_results=6)
         if res:
             lines = ["[Top results by relevance]"]
             for i, r in enumerate(res[:6], 1):
@@ -463,13 +475,13 @@ async def search_web(
 
     # 2) Fetch real content from the top result pages (dates + text)
     try:
-        res = _ddg_search(query, max_results=4)
+        res = await asyncio.to_thread(_ddg_search, query, max_results=4)
         if res:
             out.append("[Fetched page content]")
             for r in res[:3]:
                 if not r["link"]:
                     continue
-                text = _extract_page_text(r["link"])
+                text = await asyncio.to_thread(_extract_page_text, r["link"])
                 out.append(f"--- {r['title']} ---\n{text}")
     except Exception as e:
         logging.warning(f"Content fetch failed for '{query}': {e}")
@@ -526,7 +538,7 @@ async def search_recent_news(
     can see how recent each item is. If the user wants general info that isn't
     time-sensitive, prefer search_web instead.
     """
-    items = _google_news_rss(query)
+    items = await asyncio.to_thread(_google_news_rss, query)
     if not items:
         return f"I couldn't find recent news about '{query}'."
     result = "\n".join(items)
@@ -548,13 +560,13 @@ async def fact_check(
     of guessing or relying on training data.
     """
     out = []
-    news = _google_news_rss(claim)
+    news = await asyncio.to_thread(_google_news_rss, claim)
     if news:
         out.append("[Recent news / headlines]")
         out.extend(news[:5])
 
     try:
-        res = _ddg_search(claim)
+        res = await asyncio.to_thread(_ddg_search, claim)
         if res:
             out.append("[Top web results]")
             for i, r in enumerate(res[:3], 1):
@@ -645,7 +657,8 @@ async def fetch_url(
 
     # Videos often publish metadata via oEmbed (YouTube, Vimeo, etc.).
     try:
-        oe = requests.get(
+        oe = await asyncio.to_thread(
+            requests.get,
             "https://www.youtube.com/oembed",
             params={"url": url, "format": "json"},
             timeout=8,
@@ -669,7 +682,8 @@ async def fetch_url(
             url = "https://" + url  # allow bare "example.com"
             parsed = urlparse(url)
 
-        resp = requests.get(
+        resp = await asyncio.to_thread(
+            requests.get,
             url,
             timeout=10,
             headers={
