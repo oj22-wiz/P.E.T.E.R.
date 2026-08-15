@@ -15,7 +15,7 @@
     --glass: rgba(16, 24, 46, .82);
     --glass-hi: rgba(30, 40, 74, .9);
     --radius: 14px;
-    --col: 300px;
+    --col: 340px;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
@@ -24,13 +24,13 @@
     color: var(--txt);
     overflow: hidden;
     user-select: none;
-    width: 100%; height: 100%;
+    width: 100%; height: 100%; height: 100vh;
   }
   body {
     display: flex; flex-direction: column;
-    align-items: center;
-    padding: 8px 10px 10px;
-    gap: 8px;
+    align-items: center; justify-content: center;
+    padding: 10px 10px 12px;
+    gap: 9px;
   }
 
   /* ── Unified command dock (URL + Share + Spotify in one glass panel) ── */
@@ -124,6 +124,22 @@
   .dot.speaking { background: var(--red); box-shadow: 0 0 10px var(--red); animation: blink .8s infinite; }
   @keyframes blink { 50% { opacity: .4; } }
 
+  /* ── Peter's task progress bar — the track is always visible in the UI;
+     the moving fill only lights up and animates while he's thinking / running a tool ── */
+  .progress-wrap {
+    position: relative; width: 100%; max-width: var(--col); height: 5px;
+    border-radius: 999px; background: rgba(255,255,255,.14); overflow: hidden;
+    z-index: 5; flex: none; margin-top: -3px;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
+  }
+  .progress-wrap i {
+    position: absolute; top: 0; left: 0; width: 0%; height: 100%;
+    border-radius: 999px; background: var(--green);
+    opacity: 0; transition: width .45s ease, opacity .2s;
+    box-shadow: 0 0 8px rgba(46,204,113,.6);
+  }
+  .progress-wrap.show i { opacity: 1; }
+
   /* ── Files drop card ── */
   .files-slot { width: 100%; max-width: var(--col); position: relative; z-index: 5; }
   .drop-zone {
@@ -184,21 +200,54 @@
   .loader { display: inline-block; width: 10px; height: 10px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: rotate .7s linear infinite; }
   @keyframes rotate { to { transform: rotate(360deg); } }
 
-  /* ── Cinematic Spiderman canvas (balanced with the chat) ── */
-  .spidey { width: 100%; flex: 1 1 auto; min-height: 0; position: relative; z-index: 0; border-radius: var(--radius); overflow: hidden; background: #0a0e1f; border: 1px solid var(--line); }
-  .spidey canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+  /* ── Task bar: what Peter is doing right now, front and center ── */
+  .taskbar { width: 100%; max-width: var(--col); flex: none; z-index: 2; box-sizing: border-box;
+    background: rgba(20,28,52,.55); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 13px 18px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 9px; min-height: 80px; transition: border-color .25s, box-shadow .25s;
+  }
+  .taskbar.active { border-color: rgba(61,123,253,.5); box-shadow: 0 0 18px rgba(61,123,253,.18); }
+  .taskbar-label { font-size: 13px; font-weight: 600; color: var(--dim); letter-spacing: .2px; text-align: center; transition: color .2s; }
+  .taskbar.active .taskbar-label { color: #fff; }
+  .taskbar .progress-wrap { margin-top: 0; }
 
   /* ── Chat transcript below the orb ── */
   .chat { width: 100%; max-width: var(--col); display: flex; flex-direction: column; background: rgba(20,28,52,.55); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; z-index: 2; flex: none; }
-  .chat-log { height: 116px; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 6px; scroll-behavior: smooth; }
+  .chat-log { height: 190px; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 9px; scroll-behavior: smooth; }
   .chat-log::-webkit-scrollbar { width: 5px; }
   .chat-log::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 999px; }
-  .msg { display: flex; flex-direction: column; max-width: 92%; }
+  .msg { display: flex; flex-direction: column; max-width: 94%; }
   .msg.peter { align-self: flex-start; align-items: flex-start; }
-  .msg .who { font-size: 7px; color: var(--dim); letter-spacing: .4px; margin-bottom: 1px; }
-  .msg .bubble { padding: 5px 7px; border-radius: 11px; font-size: 8.5px; line-height: 1.4; word-break: break-word; white-space: pre-wrap; }
+  .msg .who { font-size: 9px; color: var(--dim); letter-spacing: .4px; margin-bottom: 2px; }
+  .msg .bubble { padding: 8px 10px; border-radius: 12px; font-size: 12px; line-height: 1.45; word-break: break-word; white-space: pre-wrap; }
   .msg.peter .bubble { background: rgba(230,36,41,.16); border: 1px solid rgba(230,36,41,.3); }
   .msg.peter a { color: var(--blue); text-decoration: underline; }
+
+  /* ── CAD design file card (dropped into the chat when Peter designs a part) ── */
+  .bubble.file-card { display: flex; flex-direction: column; gap: 6px; padding: 9px 10px; }
+  .file-card-head { font-size: 12.5px; font-weight: 700; color: #fff; }
+  .file-card-sub { font-size: 10.5px; color: var(--dim); line-height: 1.3; }
+  .file-card-preview { width: 100%; max-height: 150px; object-fit: contain; border-radius: 8px;
+    background: #0a1128; border: 1px solid var(--line); display: block; }
+  .file-card-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+  .fc-btn { cursor: pointer; padding: 5px 10px; border-radius: 999px; font-size: 10.5px; font-weight: 600;
+    border: 1px solid rgba(46,204,113,.5); background: rgba(46,204,113,.15); color: #fff;
+    transition: background .2s, border-color .2s; }
+  .fc-btn:hover { background: rgba(46,204,113,.3); }
+  .fc-btn.secondary { border-color: var(--line); background: rgba(255,255,255,.06); }
+  .fc-btn.secondary:hover { background: rgba(255,255,255,.14); }
+
+  /* ── Result card (dropped into the chat when Peter writes a result via
+     show_in_chat, instead of / in addition to saying it out loud) ── */
+  .bubble.result-card { border-left: 2px solid var(--green); }
+  .result-card-head { font-size: 12.5px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+
+  /* ── Search-result links card (dropped into the chat whenever a search
+     tool finds real links — Peter never reads full URLs out loud) ── */
+  .link-list { display: flex; flex-direction: column; gap: 5px; }
+  .link-item { color: var(--blue); text-decoration: underline; font-size: 11px; line-height: 1.4;
+    display: block; word-break: break-word; }
+  .link-item:hover { color: #fff; }
 
   /* ── Window controls ── */
   .win-controls { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; padding: 6px 8px; z-index: 10; pointer-events: none; }
@@ -279,17 +328,20 @@
     <div class="eye l"></div>
     <div class="eye r"></div>
   </div>
-  <div class="tap-hint" id="tapHint">Tap to talk</div>
+  <div class="tap-hint" id="tapHint">Clap or tap to talk</div>
 </div>
 
-<!-- Cinematic 8-bit Spiderman swinging scene (fills remaining vertical space, no sound) -->
-<div class="spidey">
-  <canvas id="spideyCanvas"></canvas>
+<!-- Task bar: what Peter is doing right now, front and center -->
+<div class="taskbar" id="taskbar">
+  <div class="taskbar-label" id="taskbarLabel">Ready to help!</div>
+  <div class="progress-wrap" id="taskProgress"><i></i></div>
 </div>
 
 <!-- Chat transcript below the orb -->
-<div class="chat" id="chat">
-  <div class="chat-log" id="chatLog"></div>
+<div class="chat">
+  <div class="chat-log" id="chatLog">
+    <!-- Messages appear here -->
+  </div>
 </div>
 
 <!-- LiveKit client (UMD — exposes window.LivekitClient) -->
@@ -300,8 +352,18 @@ const $ = (id) => document.getElementById(id);
 const statusDot = $('statusDot'), statusText = $('statusText');
 const orbWrap = $('orbWrap');
 
-let room = null, micTrack = null, audioEl = null, audioCtx = null;
-let liveKitToken = null, liveKitUrl = null, active = false;
+let room = null, micTrack = null, audioEl = null;
+let liveKitToken = null, liveKitUrl = null, active = false, connecting = false;
+
+// Devtools are disabled in production, so route every uncaught error/
+// rejection to ui_debug.log (via clientLog, defined below) — otherwise a
+// silent JS error here is invisible to both the user and whoever's debugging.
+window.addEventListener('error', (e) => {
+  try { clientLog('window error: ' + (e && e.message) + ' @ ' + (e && e.filename) + ':' + (e && e.lineno)); } catch (_) {}
+});
+window.addEventListener('unhandledrejection', (e) => {
+  try { clientLog('unhandled promise rejection: ' + (e && e.reason)); } catch (_) {}
+});
 
 function setStatus(kind, text) {
   statusDot.className = 'dot' + (kind ? ' ' + kind : '');
@@ -320,7 +382,7 @@ async function loadConnectionInfo() {
     const info = await window.pywebview.api.get_connection_info();
     liveKitUrl = info.url;
     liveKitToken = info.token;
-    setStatus('online', 'Tap to talk');
+    setStatus('online', 'Clap or tap to talk');
     return true;
   } catch (e) {
     console.error(e);
@@ -330,8 +392,11 @@ async function loadConnectionInfo() {
 }
 
 async function toggleCall() {
+  if (connecting) return; // ignore double-taps while a connect attempt is in flight
   if (active) { await endCall(); return; }
   if (!liveKitToken && !(await loadConnectionInfo())) return;
+  connecting = true;
+  stopClapListener(); // free the mic + stop listening for wake-claps while we're on a call
   setOrbState('interacting');
   $('tapHint').textContent = 'Connecting…';
   try {
@@ -339,6 +404,8 @@ async function toggleCall() {
     room.on(LivekitClient.RoomEvent.TrackSubscribed, onTrackSubscribed);
     room.on(LivekitClient.RoomEvent.DataReceived, handleDataReceived);
     room.on(LivekitClient.RoomEvent.MediaDevicesError, (e) => console.error('media error', e));
+    room.on(LivekitClient.RoomEvent.Disconnected, onRoomDisconnected);
+    room.on(LivekitClient.RoomEvent.AudioPlaybackStatusChanged, onAudioPlaybackStatusChanged);
     await room.connect(liveKitUrl, liveKitToken, { autoSubscribe: true });
     micTrack = await LivekitClient.createLocalAudioTrack();
     await room.localParticipant.publishTrack(micTrack);
@@ -351,22 +418,177 @@ async function toggleCall() {
   } catch (e) {
     console.error(e);
     setStatus('', 'Could not reach Peter');
-    $('tapHint').textContent = 'Tap to talk';
+    $('tapHint').textContent = 'Clap or tap to talk';
     setOrbState(null);
+    showTaskProgress(false);
     await cleanupRoom();
+  } finally {
+    connecting = false;
+    if (!active) startClapListener(); // not on a call — (re)start listening for a clap
   }
+}
+
+// If the room drops unexpectedly (network blip, agent crash, server kick),
+// don't leave the UI stuck showing "listening" for a call that's actually dead.
+function onRoomDisconnected() {
+  if (!active) return;
+  active = false;
+  setOrbState(null);
+  showTaskProgress(false);
+  setTaskbar(false, 'Ready to help!');
+  $('tapHint').textContent = 'Clap or tap to talk';
+  setStatus('', 'Disconnected — tap to reconnect');
+  room = null; micTrack = null;
+  if (audioEl) { audioEl.remove(); audioEl = null; }
+  startClapListener(); // call ended — resume listening for the next wake-clap
 }
 
 function onTrackSubscribed(track, publication, participant) {
   if (track.kind !== 'audio') return;
   try {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const src = audioCtx.createMediaStreamSource(new MediaStream([track.mediaStreamTrack]));
-    src.connect(audioCtx.destination);
+    // track.attach() is LiveKit's own managed playback path — it creates and
+    // plays an <audio> element AND wires up the AudioPlaybackFailed/Started
+    // tracking that drives canPlaybackAudio below. A second, hand-rolled
+    // AudioContext->destination graph used to run alongside this, adding no
+    // benefit and (since it wasn't guarded like audioEl is) re-connecting a
+    // fresh source node on every TrackSubscribed firing.
     if (!audioEl) { audioEl = track.attach(); audioEl.autoplay = true; document.body.appendChild(audioEl); }
     setOrbState('speaking');
     track.on(LivekitClient.TrackEvent.Ended, () => { if (active) setOrbState('listening'); });
   } catch (e) { console.error('failed to play agent audio', e); }
+}
+
+// Chromium's autoplay policy can block Peter's voice from actually playing
+// even though everything else (status text, orb animation) keeps working —
+// that's exactly the "it says speaking but no sound" symptom. LiveKit
+// detects this via canPlaybackAudio; when it's blocked, the fix is a real
+// user gesture calling room.startAudio(), so the next tap anywhere retries it.
+function onAudioPlaybackStatusChanged() {
+  if (!room || room.canPlaybackAudio) return;
+  console.warn('Audio playback blocked by the browser — waiting for a tap to unlock it.');
+  $('tapHint').textContent = 'Tap anywhere for sound';
+}
+document.addEventListener('click', () => {
+  // Extra safety net for the clap listener's AudioContext, in case the
+  // autoplay-gesture policy wasn't fully disabled for some reason — any
+  // click anywhere unlocks it immediately.
+  if (clapCtx && clapCtx.state !== 'running') clapCtx.resume().catch(() => {});
+  if (!room || room.canPlaybackAudio) return;
+  room.startAudio().then(() => {
+    if (active) $('tapHint').textContent = 'Tap to end';
+  }).catch((e) => console.error('startAudio retry failed', e));
+});
+
+// ── Clap-to-connect ── listens continuously (from app boot) on a mic stream
+// of its own — separate from the LiveKit call mic — for a double-clap
+// pattern, and connects to Peter the same way tapping the orb does. Requiring
+// two sharp claps in quick succession (rather than one) avoids false wakes
+// from a single loud bang, dropped object, or cough. Paused whenever a call
+// is connecting/active (frees the mic, and a live call ignores claps), and
+// resumed automatically whenever the call ends or fails.
+//
+// Sensitivity is adaptive rather than one fixed magic number: a clap must
+// beat a rolling estimate of the room's own ambient noise level by
+// CLAP_RATIO, so it self-tunes to whatever mic/gain/distance the user has
+// instead of relying on a guessed constant that's wrong for their setup.
+const CLAP_MIN_PEAK = 0.05;        // absolute floor — never trigger on near-silence, no matter the ratio
+const CLAP_RATIO = 3;              // a clap's peak must be this many x louder than the recent ambient floor
+const NOISE_FLOOR_ALPHA = 0.03;    // how fast the ambient-floor estimate adapts (per ~25ms tick)
+const CLAP_COOLDOWN_MS = 200;      // ignore further spikes this long after one clap (its own decay/echo)
+const CLAP_PAIR_WINDOW_MS = 1200;  // two claps must land within this long of each other
+const CLAP_POLL_MS = 25;           // analysis tick rate — shorter than the analyser window below, so no gaps
+let clapStream = null, clapCtx = null, clapAnalyser = null, clapInterval = null;
+let clapTimes = [], lastClapAt = 0, noiseFloor = 0.01;
+let clapRetryTimer = null, clapRetryDelay = 1500, lastDiagLogAt = 0;
+
+function clientLog(msg) {
+  console.log(msg);
+  try { window.pywebview && window.pywebview.api && window.pywebview.api.client_log(msg); } catch (e) {}
+}
+
+async function startClapListener() {
+  if (clapStream || active || connecting) return; // already listening, or a call is using the mic
+  clearTimeout(clapRetryTimer);
+  try {
+    clapStream = await navigator.mediaDevices.getUserMedia({
+      // AGC boosts quiet/far claps instead of leaving them under the floor;
+      // echo/noise suppression stay off since they're tuned for voice and
+      // actively fight percussive transients like a clap.
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true }
+    });
+    clapCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const source = clapCtx.createMediaStreamSource(clapStream);
+    clapAnalyser = clapCtx.createAnalyser();
+    clapAnalyser.fftSize = 2048; // ~43ms window at 48kHz — wider than the poll interval so no sample gaps
+    source.connect(clapAnalyser);
+    const data = new Float32Array(clapAnalyser.fftSize);
+    clapRetryDelay = 1500; // reset backoff after a clean start
+    clientLog('clap listener: mic acquired, listening for claps');
+    clapInterval = setInterval(() => {
+      if (!clapAnalyser || !clapCtx) return;
+      if (clapCtx.state !== 'running') {
+        // Chromium can leave a freshly-created AudioContext suspended until
+        // a user gesture; keep nudging it every tick so detection starts
+        // working the instant it's allowed to run, with no click required.
+        clapCtx.resume().catch(() => {});
+        return;
+      }
+      clapAnalyser.getFloatTimeDomainData(data);
+      let peak = 0;
+      for (let i = 0; i < data.length; i++) { const v = Math.abs(data[i]); if (v > peak) peak = v; }
+      const now = Date.now();
+      const coolingDown = now - lastClapAt < CLAP_COOLDOWN_MS;
+      const dynamicThreshold = Math.max(CLAP_MIN_PEAK, noiseFloor * CLAP_RATIO);
+      // Periodic proof-of-life: confirms real mic signal is flowing (not
+      // silently stuck at 0 from a suspended AudioContext) and shows exactly
+      // how close ambient/clap levels are to the trigger threshold.
+      if (now - lastDiagLogAt > 3000) {
+        lastDiagLogAt = now;
+        clientLog('mic level — peak=' + peak.toFixed(3) + ' floor=' + noiseFloor.toFixed(3) + ' threshold=' + dynamicThreshold.toFixed(3) + ' ctxState=' + clapCtx.state);
+      }
+      if (!coolingDown && peak > dynamicThreshold) {
+        lastClapAt = now;
+        onClapDetected(now);
+      } else if (!coolingDown) {
+        // Let the floor drift toward ambient level; cap the sample so a
+        // clap itself (already below-threshold ones included) never drags
+        // the floor up and desensitizes future detection.
+        noiseFloor = noiseFloor * (1 - NOISE_FLOOR_ALPHA) + Math.min(peak, dynamicThreshold) * NOISE_FLOOR_ALPHA;
+      }
+    }, CLAP_POLL_MS);
+  } catch (e) {
+    clientLog('clap listener error: ' + (e && e.message ? e.message : e));
+    stopClapListener();
+    // Self-heal: mic-permission grant can race the app's own boot sequence —
+    // keep retrying with backoff instead of giving up on the first failure.
+    clapRetryTimer = setTimeout(() => startClapListener(), clapRetryDelay);
+    clapRetryDelay = Math.min(clapRetryDelay * 2, 15000);
+  }
+}
+
+function stopClapListener() {
+  clearTimeout(clapRetryTimer);
+  if (clapInterval) clearInterval(clapInterval);
+  clapInterval = null;
+  clapAnalyser = null;
+  if (clapStream) { clapStream.getTracks().forEach((t) => t.stop()); clapStream = null; }
+  if (clapCtx) { clapCtx.close().catch(() => {}); clapCtx = null; }
+  clapTimes = [];
+}
+
+function onClapDetected(now) {
+  clapTimes = clapTimes.filter((t) => now - t < CLAP_PAIR_WINDOW_MS);
+  clapTimes.push(now);
+  clientLog('clap detected (' + clapTimes.length + (clapTimes.length === 1 ? '/2)' : '/2) — connecting'));
+  if (clapTimes.length === 1) {
+    // Brief visual feedback so a real clap looks "heard" even before the
+    // second one lands (reuses the existing eye-squint animation).
+    orbWrap.classList.add('interacting');
+    setTimeout(() => { if (!active && !connecting) orbWrap.classList.remove('interacting'); }, 220);
+  } else if (clapTimes.length >= 2) {
+    clapTimes = [];
+    if (!active && !connecting) toggleCall();
+  }
 }
 
 function waitForAgent(timeoutMs) {
@@ -392,13 +614,18 @@ async function cleanupRoom() {
 }
 
 async function endCall() {
-  await cleanupRoom();
+  // Flip `active` off first so the Disconnected event fired by room.disconnect()
+  // below sees onRoomDisconnected's guard and skips its redundant reset.
   active = false;
+  await cleanupRoom();
   screenTrack = null;
   setSharing(false);
   setOrbState(null);
-  $('tapHint').textContent = 'Tap to talk';
-  setStatus('online', 'Tap to talk');
+  showTaskProgress(false);
+  setTaskbar(false, 'Ready to help!');
+  $('tapHint').textContent = 'Clap or tap to talk';
+  setStatus('online', 'Clap or tap to talk');
+  startClapListener(); // call ended — resume listening for the next wake-clap
 }
 
 const urlInput = $('urlInput'), urlClear = $('urlClear');
@@ -595,7 +822,7 @@ filesSet.addEventListener('click', async () => {
 filesList.addEventListener('change', () => { const sel = filesList.selectedOptions[0]; if (sel) filesNote.textContent = 'Tap "Set active →" to save: ' + sel.textContent; });
 
 const chatLog = $('chatLog');
-function escapeHtml(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '<').replace(/>/g, '>').replace(/"/g, '"'); }
+function escapeHtml(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 function linkify(text) {
   return escapeHtml(text).replace(/((?:https?:\/\/|www\.)[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
 }
@@ -609,10 +836,149 @@ function appendMsg(text) {
   chatLog.appendChild(wrap);
   chatLog.scrollTop = chatLog.scrollHeight;
 }
+
+// ── Task bar — driven by "peter-status" data-channel messages broadcast
+// from agent.py (agent_state_changed / tool_execution_updated). ──
+const taskbar = $('taskbar'), taskbarLabel = $('taskbarLabel'), taskProgress = $('taskProgress');
+const taskProgressFill = taskProgress.querySelector('i');
+let progressWatchdog = null, progressHideTimer = null, progressPct = 0, toolStepsThisTurn = 0;
+function setTaskbar(isActive, label) {
+  taskbar.classList.toggle('active', !!isActive);
+  if (label) taskbarLabel.textContent = label;
+}
+function setProgressPct(pct) {
+  progressPct = Math.max(0, Math.min(100, pct));
+  taskProgressFill.style.width = progressPct + '%';
+}
+// Real, event-driven progress (not a fake indeterminate loop): each stage of
+// Peter's work — thinking, each tool call, each tool finishing, speaking the
+// answer — pushes the green bar forward, so it actually reflects how far
+// along the current task is.
+function showTaskProgress(on, pct) {
+  taskProgress.classList.toggle('show', !!on);
+  clearTimeout(progressWatchdog);
+  clearTimeout(progressHideTimer);
+  if (on) {
+    if (typeof pct === 'number') setProgressPct(pct);
+    // Safety net: if a follow-up status update never arrives (dropped
+    // message, swallowed tool error, etc.) the bar shouldn't spin forever.
+    progressWatchdog = setTimeout(() => { taskProgress.classList.remove('show'); setProgressPct(0); }, 25000);
+  } else {
+    // Let the opacity fade play, then reset the fill so the next task starts from empty.
+    progressHideTimer = setTimeout(() => setProgressPct(0), 220);
+  }
+}
+function handlePeterStatus(msg) {
+  const state = msg.state;
+  if (state === 'thinking') {
+    toolStepsThisTurn = 0;
+    showTaskProgress(true, 20);
+    setTaskbar(true, 'Thinking…');
+  } else if (state === 'tool') {
+    toolStepsThisTurn += 1;
+    showTaskProgress(true, Math.min(85, 40 + toolStepsThisTurn * 15));
+    setTaskbar(true, msg.label || 'Working…');
+  } else if (state === 'tool_done') {
+    setProgressPct(Math.min(92, progressPct + 5));
+  } else if (state === 'speaking') {
+    showTaskProgress(true, 100);
+    setTaskbar(true, 'Speaking…');
+    progressHideTimer = setTimeout(() => showTaskProgress(false), 500);
+  } else if (state === 'listening') {
+    showTaskProgress(false);
+    setTaskbar(false, 'Listening…');
+  } else {
+    showTaskProgress(false);
+    setTaskbar(false, 'Ready to help!');
+  }
+}
+
+// ── File / link cards — driven by "peter-files" data-channel messages. ──
+function toFileUrl(p) {
+  if (!p) return '';
+  let s = p.replace(/\\/g, '/');
+  if (!s.startsWith('/')) s = '/' + s;
+  return 'file://' + encodeURI(s);
+}
+function appendFileCard(d) {
+  const wrap = document.createElement('div'); wrap.className = 'msg peter';
+  const whoEl = document.createElement('div'); whoEl.className = 'who'; whoEl.textContent = 'PETER';
+  const bubble = document.createElement('div'); bubble.className = 'bubble file-card';
+  const head = document.createElement('div'); head.className = 'file-card-head'; head.textContent = 'Designed: ' + d.name;
+  bubble.appendChild(head);
+  if (d.png) {
+    const img = document.createElement('img'); img.className = 'file-card-preview'; img.src = toFileUrl(d.png); img.alt = d.name;
+    bubble.appendChild(img);
+  }
+  const sub = document.createElement('div'); sub.className = 'file-card-sub';
+  const parts = [];
+  if (d.stl) parts.push('STL ready');
+  if (d.scad) parts.push('SCAD source');
+  sub.textContent = parts.join(' · ') || 'Files saved';
+  bubble.appendChild(sub);
+  const actions = document.createElement('div'); actions.className = 'file-card-actions';
+  if (d.stl) {
+    const b = document.createElement('button'); b.className = 'fc-btn'; b.textContent = 'Open STL';
+    b.addEventListener('click', () => window.pywebview.api.open_cad_design(d.name, 'stl'));
+    actions.appendChild(b);
+  }
+  const rb = document.createElement('button'); rb.className = 'fc-btn secondary'; rb.textContent = 'Show in folder';
+  rb.addEventListener('click', () => window.pywebview.api.reveal_cad_design(d.name));
+  actions.appendChild(rb);
+  bubble.appendChild(actions);
+  wrap.appendChild(whoEl); wrap.appendChild(bubble);
+  chatLog.appendChild(wrap);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+function appendLinkList(links) {
+  if (!links || !links.length) return;
+  const wrap = document.createElement('div'); wrap.className = 'msg peter';
+  const whoEl = document.createElement('div'); whoEl.className = 'who'; whoEl.textContent = 'LINKS';
+  const bubble = document.createElement('div'); bubble.className = 'bubble';
+  const list = document.createElement('div'); list.className = 'link-list';
+  links.forEach((l) => {
+    const a = document.createElement('a'); a.className = 'link-item'; a.href = l.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = l.title || l.url;
+    list.appendChild(a);
+  });
+  bubble.appendChild(list);
+  wrap.appendChild(whoEl); wrap.appendChild(bubble);
+  chatLog.appendChild(wrap);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+function appendResultCard(d) {
+  const wrap = document.createElement('div'); wrap.className = 'msg peter';
+  const whoEl = document.createElement('div'); whoEl.className = 'who'; whoEl.textContent = 'PETER';
+  const bubble = document.createElement('div'); bubble.className = 'bubble result-card';
+  if (d.title) {
+    const head = document.createElement('div'); head.className = 'result-card-head'; head.textContent = d.title;
+    bubble.appendChild(head);
+  }
+  const body = document.createElement('div'); body.innerHTML = linkify(d.text || '');
+  bubble.appendChild(body);
+  wrap.appendChild(whoEl); wrap.appendChild(bubble);
+  chatLog.appendChild(wrap);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+function handlePeterFiles(msg) {
+  if (msg.type === 'cad_design') appendFileCard(msg);
+  else if (msg.type === 'search_links') appendLinkList(msg.links);
+  else if (msg.type === 'chat_message') appendResultCard(msg);
+}
+
 function handleDataReceived(payload, participant, kind, topic) {
-  if (kind !== 'reliable') return;
+  // kind is livekit-client's DataPacket_Kind enum — a NUMBER (RELIABLE=0,
+  // LOSSY=1), never the string 'reliable'. Comparing against the string
+  // silently dropped every single data-channel message (chat, status bar,
+  // file cards, search links) since agent.py always publishes reliable=True.
+  if (kind !== LivekitClient.DataPacket_Kind.RELIABLE) return;
   try {
     const msg = JSON.parse(new TextDecoder().decode(payload));
+    if (topic === 'peter-status' && msg && msg.state) { handlePeterStatus(msg); return; }
+    if (topic === 'peter-files' && msg && msg.type) { handlePeterFiles(msg); return; }
+    if (topic === 'peter-control' && msg && msg.type === 'close_app') {
+      try { window.pywebview.api.close_window(); } catch (err) { console.error(err); }
+      return;
+    }
     if (msg && msg.transcriptions && Array.isArray(msg.transcriptions)) {
       for (const t of msg.transcriptions) {
         if (!t || !t.text) continue;
@@ -626,143 +992,18 @@ function handleDataReceived(payload, participant, kind, topic) {
 $('btnMinimize').addEventListener('click', (e) => { e.stopPropagation(); try { window.pywebview.api.minimize_window(); } catch (err) { console.error(err); } });
 $('btnClose').addEventListener('click', (e) => { e.stopPropagation(); try { window.pywebview.api.close_window(); } catch (err) { console.error(err); } });
 
-/* ── 8-bit Spiderman swinging animation (loop, no sound) ── */
-(function spidey() {
-  const cv = document.getElementById('spideyCanvas');
-  if (!cv) return;
-  const ctx = cv.getContext('2d');
-  const PX = 3;
-  let W = 0, H = 0, TOR = 0;
-  const skyLo = '#0a0e1f', skyHi = '#1a2246', winOn = '#ffd96a';
-  let CITYW = 0, city = [];
-  function makeCity() {
-    const c = []; let x = 0;
-    while (x < W + 200) {
-      const bw = 8 + Math.floor(Math.random() * 18);
-      const bh = 50 + Math.floor(Math.random() * (H * 0.55 | 0));
-      const roofY = Math.max(5, Math.floor(H * 0.08 + (H - 46 - bh) - Math.random() * 26));
-      c.push({ x: x, w: bw, h: bh, roofY: roofY, tint: Math.random() });
-      x += bw + (Math.random() < 0.4 ? 2 : 4);
-    }
-    CITYW = x;
-    return c;
-  }
-  function resize() {
-    W = cv.clientWidth || 300; H = cv.clientHeight || 200;
-    cv.width = Math.max(48, Math.floor(W / PX)); cv.height = Math.max(32, Math.floor(H / PX));
-    W = cv.width; H = cv.height; city = makeCity();
-  }
-  function px(x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h))); }
-  function drawSky(offset) {
-    for (let y = 0; y < H; y++) { const t = y / H; const c = t < 0.58 ? skyLo : (t < 0.66 ? skyHi : '#131939'); ctx.fillStyle = c; ctx.fillRect(0, y, W, 1); }
-    ctx.fillStyle = '#cfd6ff';
-    for (let i = 0; i < 16; i++) { const sx = (i * 37 + offset) % (W + 2) - 1; const sy = (i * 53 % Math.floor(H * 0.55)); ctx.fillRect(sx, sy, 1, 1); }
-    ctx.fillStyle = '#e8ecff'; ctx.fillRect(Math.floor(W * 0.8), 7, 6, 6); ctx.fillStyle = skyLo; ctx.fillRect(Math.floor(W * 0.81), 7, 3, 3);
-  }
-  function drawCity(offset) {
-    const o = ((Math.floor(offset) % CITYW) + CITYW) % CITYW;
-    for (const b of city) {
-      let x = b.x - o; if (x < -b.w) x += CITYW; if (x < -b.w || x > W) continue;
-      const body = b.tint > 0.5 ? '#1c2448' : '#161c38';
-      ctx.fillStyle = body; ctx.fillRect(x, b.roofY, b.w, H - b.roofY);
-      ctx.fillStyle = '#262e58'; ctx.fillRect(x, b.roofY, 1, H - b.roofY);
-      ctx.fillStyle = '#0d1226'; ctx.fillRect(x + b.w - 1, b.roofY, 1, H - b.roofY);
-      ctx.fillStyle = b.tint > 0.5 ? '#21294f' : '#10152c'; ctx.fillRect(x, b.roofY, b.w, 2);
-      if (b.tint > 0.75) { ctx.fillStyle = '#3a4472'; ctx.fillRect(x + (b.w >> 1), b.roofY - 4, 1, 4); ctx.fillStyle = '#e02429'; ctx.fillRect(x + (b.w >> 1), b.roofY - 5, 1, 1); }
-      for (let wy = b.roofY + 5; wy < H - 5; wy += 4) { for (let wx = b.w * 0.25 | 0; wx < b.w - 1; wx += 3) { if ((wx * 7 + wy * 13) % 9 === 0) continue; ctx.fillStyle = winOn; ctx.fillRect(x + wx, wy, 1, 1); } }
-    }
-  }
-  const SPAN = () => Math.floor(W * 0.55), TOPY = 6, WLEN = () => Math.floor(H * 0.52);
-  function wrap(x) { x %= W; if (x < 0) x += W; return Math.round(x); }
-  function drawTower(tx) {
-    const tw = 14;
-    ctx.fillStyle = '#252c54'; ctx.fillRect(tx, TOPY, tw, H - TOPY);
-    ctx.fillStyle = '#2f3766'; ctx.fillRect(tx, TOPY, 1, H - TOPY);
-    ctx.fillStyle = '#0e1329'; ctx.fillRect(tx + tw - 1, TOPY, 1, H - TOPY);
-    ctx.fillStyle = '#3a4472'; ctx.fillRect(tx + (tw >> 1), TOPY - 5, 1, 5); ctx.fillStyle = '#e02429'; ctx.fillRect(tx + (tw >> 1), TOPY - 8, 1, 3);
-    for (let wy = TOPY + 5; wy < H - 5; wy += 4) { for (let wx = 3; wx < tw - 2; wx += 4) { if ((wx + wy) % 7 === 0) continue; ctx.fillStyle = winOn; ctx.fillRect(tx + wx, wy, 1, 1); } }
-    return tx + (tw >> 1);
-  }
-  function drawWebLine(x1, y1, x2, y2) {
-    ctx.strokeStyle = '#e6ecff'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-  }
-  function drawSpidey(x, y, angle) {
-    ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
-    ctx.fillStyle = '#d9181e'; ctx.fillRect(-1, -6, 1, 3); ctx.fillRect(0, -7, 1, 3);
-    ctx.fillStyle = '#e62429'; ctx.fillRect(-2, -5, 4, 3);
-    ctx.fillStyle = '#ffffff'; ctx.fillRect(-1, -4, 1, 1); ctx.fillRect(1, -4, 1, 1);
-    ctx.fillStyle = '#e62429'; ctx.fillRect(-2, -2, 4, 4);
-    ctx.fillStyle = '#3d5af1'; ctx.fillRect(-3, 2, 2, 3); ctx.fillRect(1, 2, 2, 3);
-    ctx.fillStyle = '#d0262b'; ctx.fillRect(-2, 1, 1, 2); ctx.fillRect(1, 1, 1, 2);
-    ctx.restore();
-  }
-  const CYCLE = 170;
-  const HOME = Math.floor(W * 0.22);
-  const THMAXA = 1.15;
-  function frame() {
-    TOR = (TOR + 1);
-    const cycle = Math.floor(TOR / CYCLE);
-    const p = (TOR % CYCLE) / CYCLE;
-    const A = HOME + cycle * SPAN();
-    const B = A + SPAN();
-    const ax = wrap(A), bx = wrap(B);
-    let sx, sy, angle = 0, webFrom = null, webTo = null;
-    if (p < 0.55) {
-      const u = p / 0.55;
-      const th = -THMAXA + u * 2 * THMAXA;
-      const len = WLEN();
-      const rx = A + len * Math.sin(th);
-      const ry = TOPY + len * Math.cos(th);
-      sx = wrap(rx); sy = Math.round(ry); angle = -th * 0.85;
-      webFrom = [ax, TOPY - 6]; webTo = [sx, sy];
-    } else if (p < 0.68) {
-      const u = (p - 0.55) / 0.13;
-      const axx = A + WLEN() * Math.sin(THMAXA);
-      const ayy = TOPY + WLEN() * Math.cos(THMAXA);
-      const rx = axx + u * Math.round(W * 0.22);
-      const ry = ayy - u * WLEN() * 0.6 + u * u * WLEN() * 1.6;
-      sx = wrap(rx); sy = Math.round(ry); angle = Math.sin(u * 4) * 0.55;
-    } else if (p < 0.85) {
-      const u = (p - 0.68) / 0.17;
-      const qx = A + WLEN() * Math.sin(THMAXA) + Math.round(W * 0.22);
-      const qy = TOPY + WLEN() * Math.cos(THMAXA) - WLEN() * 0.6 + WLEN() * 1.6;
-      const rx = qx + (B - qx) * u;
-      const ry = qy + (TOPY - qy) * u;
-      sx = wrap(rx); sy = Math.round(ry); angle = Math.cos(u * 3.2) * 0.35;
-      webFrom = [sx, sy]; webTo = [bx, TOPY - 6];
-    } else {
-      const u = (p - 0.85) / 0.15;
-      const lx = B - WLEN() * Math.sin(THMAXA);
-      const ly = TOPY + WLEN() * Math.cos(THMAXA);
-      const rx = B + (lx - B) * u;
-      const ry = TOPY + (ly - TOPY) * u;
-      sx = wrap(rx); sy = Math.round(ry); angle = -0.4 * (1 - u);
-    }
-    drawSky(0);
-    drawCity(0);
-    const axx = drawTower(ax);
-    drawTower(bx);
-    if (webFrom && webTo) drawWebLine(webFrom[0], webFrom[1], webTo[0], webTo[1]);
-    ctx.strokeStyle = 'rgba(230,238,255,.18)';
-    for (let i = 0; i < 3; i++) {
-      const lx = (i * 13 + TOR) % W;
-      ctx.beginPath(); ctx.moveTo(lx, (i * 23) % H); ctx.lineTo(lx + 6 - i * 2, (i * 23 + 4) % H); ctx.stroke();
-    }
-    drawSpidey(sx, sy, angle);
-    requestAnimationFrame(frame);
-  }
-  window.addEventListener('resize', resize);
-  resize();
-  requestAnimationFrame(frame);
-})();
-
 window.addEventListener('pywebviewready', () => {
+  clientLog('pywebviewready fired — page is live');
   loadConnectionInfo();
   loadUrl();
   loadSpotify();
   refreshFiles();
+  // Small head start so peter_app.py's native mic-permission-grant hook
+  // (attached on its own window "loaded" event) is never raced by this
+  // page's very first getUserMedia call — startClapListener() retries with
+  // backoff on failure anyway, but this avoids the first attempt failing.
+  setTimeout(() => startClapListener(), 600);
 });
 </script>
 </body>
 </html>
-

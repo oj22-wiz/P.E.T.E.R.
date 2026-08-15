@@ -17,6 +17,8 @@ venv/
 memory_store/
 received_files/
 KMS/
+learned_notes.md
+cad_designs/
 
 # OS / editor
 .DS_Store

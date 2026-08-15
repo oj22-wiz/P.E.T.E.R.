@@ -6,8 +6,9 @@ Run with:
     python peter_app.py     (or double-click the "P.E.T.E.R" desktop shortcut)
 
 A small frameless, transparent, always-on-top orb appears at the top-right of
-the screen. Click the orb (or the Talk button) to connect to Peter's voice
-assistant. The orb's ring + mask animate while Peter is talking.
+the screen. The app listens from the moment it opens: click the orb to
+connect to Peter's voice assistant, or clap twice in quick succession to
+connect hands-free. The orb's ring + mask animate while Peter is talking.
 
 If the agent worker isn't already running, launching this app starts it
 automatically in a "PETER-WORKER" console window — no separate step needed.
@@ -18,6 +19,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from datetime import datetime
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -27,6 +29,17 @@ import pending
 import file_storage
 
 load_dotenv()
+
+# The clap-to-connect listener runs an AudioContext the instant the app
+# boots, before the user has made any gesture (click/tap). Chromium's
+# autoplay policy suspends a fresh AudioContext until a user gesture occurs,
+# which would silently starve it of data forever. WebView2 honors this env
+# var (read by its own loader, independent of pywebview) to disable that
+# gate for this app's WebView2 instance only — set before any window is
+# created. Respect an existing value if the user has already set one.
+os.environ.setdefault("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--autoplay-policy=no-user-gesture-required")
+
+_UI_LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui_debug.log")
 
 _window = None  # the live pywebview window (for moving / closing)
 _worker_proc = None  # the launched agent worker process (for kill/minimize)
@@ -204,6 +217,40 @@ class PeterApi:
             print(f"files_choose error: {e}")
             return {"ok": False, "error": str(e)}
 
+    # ── CAD designs (open/reveal the files Peter creates) ────
+    def open_cad_design(self, name: str, kind: str) -> dict:
+        """Open one of a design's files (stl/png/scad) with its default app.
+
+        Called from the file card in the chat log when the user taps
+        "Open STL" / "Preview". `name`/`kind` are resolved through
+        cad_tools.get_design_paths, which only ever returns paths that
+        actually exist under cad_designs/ — nothing else is ever opened.
+        """
+        import cad_tools
+        try:
+            path = cad_tools.get_design_paths(name).get(kind)
+            if not path:
+                return {"ok": False, "error": "That file doesn't exist."}
+            os.startfile(path)  # noqa: S606 — path came from get_design_paths, not user input
+            return {"ok": True}
+        except Exception as e:  # noqa: BLE001
+            print(f"open_cad_design error: {e}")
+            return {"ok": False, "error": str(e)}
+
+    def reveal_cad_design(self, name: str) -> dict:
+        """Open Explorer with a design's STL (or scad, if no STL) selected."""
+        import cad_tools
+        try:
+            paths = cad_tools.get_design_paths(name)
+            path = paths.get("stl") or paths.get("scad")
+            if not path:
+                return {"ok": False, "error": "That file doesn't exist."}
+            subprocess.Popen(["explorer", "/select,", path])
+            return {"ok": True}
+        except Exception as e:  # noqa: BLE001
+            print(f"reveal_cad_design error: {e}")
+            return {"ok": False, "error": str(e)}
+
     # ── Spotify integration ─────────────────────────────────
     def spotify_status(self) -> dict:
         """Return whether Spotify is authorized, plus the default playlist."""
@@ -275,6 +322,23 @@ class PeterApi:
         except Exception as e:  # noqa: BLE001
             print(f"spotify_set_default_playlist error: {e}")
             return {"ok": False, "error": str(e)}
+
+    def client_log(self, message: str) -> dict:
+        """Append a message from peter_ui.html's JS to ui_debug.log.
+
+        The app is normally launched via the desktop shortcut (no console
+        attached) and devtools are disabled, so a log file — not stdout — is
+        the only reliable way to see what's happening in the page, e.g. the
+        clap listener's mic/permission lifecycle. The file is reset at the
+        start of each run (see main()) so it always reflects the latest
+        session.
+        """
+        try:
+            with open(_UI_LOG_PATH, "a", encoding="utf-8") as f:
+                f.write(f"{datetime.now().strftime('%H:%M:%S')}  {message}\n")
+        except Exception:
+            pass
+        return {"ok": True}
 
     def hide_window(self) -> dict:
         """Collapse the orb back down off-screen (Siri-style dismiss)."""
@@ -518,17 +582,17 @@ def _ensure_worker() -> None:
     # separate child process, and both could call _ensure_worker() before
     # either worker shows up in the process list. A lock file holding the
     # worker's PID makes sure only one worker is ever launched.
+    #
+    # Stale-lock cleanup (a leftover PID recycled by another app) is already
+    # handled safely by _is_worker_running() above — it validates the PID
+    # actually belongs to an agent.py process before removing the lock.
+    # DO NOT also blind-remove the lock file here: two _ensure_worker() calls
+    # racing (e.g. a double-click launching peter_app.py twice) would each
+    # delete the OTHER's freshly-created lock right before their own
+    # O_EXCL create, so both succeed and both launch a worker — exactly the
+    # duplicate-worker bug this lock exists to prevent.
     base = os.path.dirname(os.path.abspath(__file__))
     lock_path = _lock_path()
-
-    # If a stale lock file exists (e.g. from a previous run whose PID was
-    # recycled by another app like VS Code), remove it so it can't block a
-    # fresh launch. Only the exclusive-create below decides who wins.
-    try:
-        if os.path.exists(lock_path):
-            os.remove(lock_path)
-    except OSError:
-        pass
 
     try:
         lock_fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -587,9 +651,76 @@ def _make_opaque_black(native_form) -> None:
         print(f"opaque background setup error: {e}")
 
 
+def _allow_mic_and_camera(native_form) -> None:
+    """Auto-grant microphone/camera permission requests, instantly.
+
+    WebView2 (the engine behind pywebview on Windows) shows its own native
+    "Allow microphone?" popup the first time the page calls getUserMedia
+    (i.e. the moment the user taps the orb to talk). For a voice assistant
+    that prompt is pure friction — hook CoreWebView2's PermissionRequested
+    event and grant mic/camera in code so the browser popup never appears
+    and talking to Peter works the instant the app opens, every launch.
+    """
+    try:
+        from System import Action
+        from Microsoft.Web.WebView2.Core import (
+            CoreWebView2PermissionKind,
+            CoreWebView2PermissionState,
+        )
+
+        webview_ctrl = getattr(native_form, "webview", None)
+        if webview_ctrl is None:
+            return
+
+        def _attach() -> None:
+            try:
+                core = webview_ctrl.CoreWebView2
+                if core is None:
+                    return
+
+                def _on_permission_requested(_sender, args):
+                    try:
+                        kind = args.PermissionKind
+                        if kind in (
+                            CoreWebView2PermissionKind.Microphone,
+                            CoreWebView2PermissionKind.Camera,
+                        ):
+                            # Setting State alone isn't enough — WebView2 only
+                            # honors it (and skips its own popup) once Handled
+                            # is also set. Miss this and the popup shows anyway.
+                            args.State = CoreWebView2PermissionState.Allow
+                            args.Handled = True
+                    except Exception as e:  # noqa: BLE001
+                        print(f"mic permission grant error: {e}")
+
+                core.PermissionRequested += _on_permission_requested
+            except Exception as e:  # noqa: BLE001
+                print(f"mic permission attach error: {e}")
+
+        # CoreWebView2 is a COM/STA object reachable only from the WinForms UI
+        # thread, but window.events.loaded fires off-thread — touching it
+        # directly here throws an InvalidCastException that silently no-ops
+        # the hook. Marshal the actual attachment back onto the control's own
+        # thread via Invoke.
+        if webview_ctrl.InvokeRequired:
+            webview_ctrl.Invoke(Action(_attach))
+        else:
+            _attach()
+    except Exception as e:  # noqa: BLE001
+        # Best-effort: if the hook can't attach, the user just sees the
+        # normal one-time browser permission prompt instead of a crash.
+        print(f"mic permission hook error: {e}")
+
+
 def main() -> None:
     import webview
     import ctypes
+
+    # Reset the UI debug log so it only ever reflects the current session.
+    try:
+        open(_UI_LOG_PATH, "w", encoding="utf-8").close()
+    except OSError:
+        pass
 
     # Make it one-click: if the agent worker isn't up yet, start it now so
     # clicking "Talk to Peter" works immediately.
@@ -600,10 +731,17 @@ def main() -> None:
 
 # Siri-style orb docked along the RIGHT edge of the screen. The width is
     # balanced so the Files drop-zone, selector, panels, and chat all fit
-    # comfortably without crowding the orb. The height is computed below to
-    # span the FULL work area — from the very top of the screen down to just
-    # above the taskbar — so the 8-bit Spiderman city has room to swing.
-    ORB_W = 370
+    # comfortably without crowding the orb. The height is sized to the
+    # panel's natural content height (status pill -> dock -> files -> orb ->
+    # task bar -> chat) rather than stretching to fill the whole screen — a
+    # full-height window left a large dead black gap below the content since
+    # the page never actually grew to match it. Shrunk from 860 after the
+    # Spiderman animation strip was replaced with the more compact task bar.
+    # Widened/heightened (was 370x660) to fit peter_ui.html's bigger chat
+    # text (--col 300->340) and taller chat-log (116->190) at proportions
+    # that still feel balanced against the taskbar, which shrank slightly.
+    ORB_W = 410
+    CONTENT_H = 750
 
     # Get the primary screen work area (excludes taskbar). Windows-only.
     screen_w, screen_h, work = 1920, 1080, None
@@ -621,13 +759,14 @@ def main() -> None:
 
     if work:
         left, top, right, bottom = work
-        ORB_H = bottom - top    # full work area: top of screen -> just above the taskbar
-        x = right - ORB_W - 6   # snug against the right edge of the work area
-        y = top                 # start right at the very top of the screen
+        avail_h = bottom - top
+        ORB_H = min(CONTENT_H, max(1, avail_h - 12))  # never exceed the visible work area
+        x = right - ORB_W - 6                          # snug against the right edge of the work area
+        y = top + max(0, (avail_h - ORB_H) // 2)        # vertically centered in the work area
     else:
-        ORB_H = screen_h
+        ORB_H = min(CONTENT_H, max(1, screen_h - 12))
         x = screen_w - ORB_W - 12
-        y = 0
+        y = max(0, (screen_h - ORB_H) // 2)
 
     global _window
     # Remember the exact work-area bounds so we can re-assert them after
@@ -656,6 +795,13 @@ def main() -> None:
         _window.events.loaded += lambda: _make_opaque_black(_window.native)
     except Exception as e:  # noqa: BLE001
         print(f"opaque background hook error: {e}")
+
+    # Auto-grant the microphone (and camera) so talking to Peter never waits
+    # on a browser permission popup.
+    try:
+        _window.events.loaded += lambda: _allow_mic_and_camera(_window.native)
+    except Exception as e:  # noqa: BLE001
+        print(f"mic permission hook registration error: {e}")
 
     # After the window is up, force it to the exact work-area rectangle so it
     # spans from the very top of the screen down to just above the taskbar.

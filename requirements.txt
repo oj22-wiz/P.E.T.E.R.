@@ -16,6 +16,7 @@ spotipy
 fastapi
 uvicorn
 psutil
+google-genai
 
 
 

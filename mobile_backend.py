@@ -20,6 +20,8 @@ POST /spotify/default   -> set the default playlist
 GET  /files        -> list received files + active file
 POST /files/save   -> save a file (base64) and mark it active
 POST /files/active -> set the active file
+GET  /designs      -> gallery page of Peter's CAD designs (STL/PNG/scad)
+GET  /cad_designs/*-> raw design files (served statically, for the gallery)
 GET  /pwa          -> the mobile PWA (index.html)
 
 Run with:
@@ -350,21 +352,118 @@ async def files_set_active(request: Request) -> dict:
 
 
 # ──────────────────────────────────────────────────────────────
+# CAD designs gallery — a browsable page for the parts Peter has designed
+# with design_cad_part (see cad_tools.py). Mounted as static files so the
+# STL / PNG / scad can be opened or downloaded directly, plus a small HTML
+# gallery page at /designs that lists them with previews.
+# ──────────────────────────────────────────────────────────────
+_CAD_DESIGNS_DIR = _HERE / "cad_designs"
+_CAD_DESIGNS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/cad_designs", StaticFiles(directory=str(_CAD_DESIGNS_DIR)), name="cad_designs")
+
+
+@app.get("/designs", include_in_schema=False)
+def designs_gallery() -> HTMLResponse:
+    """A simple gallery of every part Peter has designed — preview render,
+    STL download (ready to slice/print), and the raw OpenSCAD source."""
+    names = (
+        sorted({p.stem for p in _CAD_DESIGNS_DIR.glob("*.scad")})
+        if _CAD_DESIGNS_DIR.exists()
+        else []
+    )
+
+    def _card(n: str) -> str:
+        has_stl = (_CAD_DESIGNS_DIR / f"{n}.stl").exists()
+        has_png = (_CAD_DESIGNS_DIR / f"{n}.png").exists()
+        preview = (
+            f'<img src="/cad_designs/{n}.png" alt="{n} preview" loading="lazy">'
+            if has_png
+            else '<div class="noimg">No preview yet</div>'
+        )
+        stl_link = (
+            f'<a class="btn" href="/cad_designs/{n}.stl" download>⬇ STL</a>'
+            if has_stl
+            else '<span class="btn disabled">No STL yet</span>'
+        )
+        return (
+            '<div class="card">'
+            f'{preview}'
+            f'<h3>{n}</h3>'
+            '<div class="links">'
+            f'{stl_link}'
+            f'<a class="btn secondary" href="/cad_designs/{n}.scad" download>.scad</a>'
+            '</div></div>'
+        )
+
+    cards_html = "".join(_card(n) for n in names) or (
+        '<p class="empty">No designs yet — ask Peter to design a part '
+        '(e.g. "design a mount for my helmet") and it\'ll show up here.</p>'
+    )
+
+    html = f"""<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>P.E.T.E.R. — My Designs</title>
+<style>
+  :root {{ color-scheme: dark; }}
+  body {{ margin:0; background:#000; color:#fff; font-family:system-ui,-apple-system,sans-serif;
+    padding:24px 16px 48px; }}
+  h1 {{ font-size:20px; margin:0 0 4px; }}
+  .sub {{ color:rgba(255,255,255,.55); font-size:13px; margin:0 0 24px; }}
+  .grid {{ display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:16px; max-width:1100px; }}
+  .card {{ background:rgba(20,28,52,.7); border:1px solid rgba(255,255,255,.15); border-radius:16px;
+    padding:14px; display:flex; flex-direction:column; gap:10px; }}
+  .card img {{ width:100%; aspect-ratio:4/3; object-fit:contain; background:#0a1128; border-radius:10px; }}
+  .noimg {{ width:100%; aspect-ratio:4/3; display:flex; align-items:center; justify-content:center;
+    background:#0a1128; border-radius:10px; color:rgba(255,255,255,.4); font-size:12px; }}
+  .card h3 {{ margin:0; font-size:14px; word-break:break-word; }}
+  .links {{ display:flex; gap:8px; flex-wrap:wrap; }}
+  .btn {{ flex:1; text-align:center; padding:8px 10px; border-radius:10px; font-size:12px; text-decoration:none;
+    border:1px solid rgba(46,204,113,.5); background:rgba(46,204,113,.15); color:#fff; }}
+  .btn.secondary {{ border-color:rgba(255,255,255,.25); background:rgba(255,255,255,.06); }}
+  .btn.disabled {{ opacity:.4; border-color:rgba(255,255,255,.15); background:transparent; }}
+  .empty {{ color:rgba(255,255,255,.55); font-size:14px; max-width:420px; }}
+  a.back {{ display:inline-block; margin-bottom:18px; color:rgba(255,255,255,.55); font-size:13px; text-decoration:none; }}
+</style></head><body>
+<a class="back" href="/">&larr; Back to Peter</a>
+<h1>🛠 My Designs</h1>
+<p class="sub">Physical parts Peter has designed with design_cad_part — {len(names)} so far.</p>
+<div class="grid">{cards_html}</div>
+</body></html>"""
+    return HTMLResponse(html, headers=_NO_CACHE_HEADERS)
+
+
+# ──────────────────────────────────────────────────────────────
 # Static PWA
 # ──────────────────────────────────────────────────────────────
+_NO_CACHE_HEADERS = {"Cache-Control": "no-cache, must-revalidate"}
+
+
 @app.get("/", include_in_schema=False)
 def index() -> FileResponse:
-    return FileResponse(_MOBILE_DIR / "index.html")
+    # no-cache (not no-store): the browser still asks each load, so a fresh
+    # deploy shows up immediately instead of a phone serving a stale shell
+    # it cached weeks ago.
+    return FileResponse(_MOBILE_DIR / "index.html", headers=_NO_CACHE_HEADERS)
 
 
 @app.get("/manifest.json", include_in_schema=False)
 def manifest() -> FileResponse:
-    return FileResponse(_MOBILE_DIR / "manifest.json")
+    return FileResponse(_MOBILE_DIR / "manifest.json", headers=_NO_CACHE_HEADERS)
 
 
 @app.get("/sw.js", include_in_schema=False)
 def sw() -> FileResponse:
-    return FileResponse(_MOBILE_DIR / "sw.js")
+    return FileResponse(_MOBILE_DIR / "sw.js", headers=_NO_CACHE_HEADERS)
+
+
+@app.get("/icon-192.png", include_in_schema=False)
+def icon_192() -> FileResponse:
+    return FileResponse(_MOBILE_DIR / "icon-192.png", headers=_NO_CACHE_HEADERS)
+
+
+@app.get("/icon-512.png", include_in_schema=False)
+def icon_512() -> FileResponse:
+    return FileResponse(_MOBILE_DIR / "icon-512.png", headers=_NO_CACHE_HEADERS)
 
 
 @app.get("/health", include_in_schema=False)
@@ -442,8 +541,11 @@ def _worker_log_path() -> str:
 
 
 # Global handle to the embedded worker process so we can check/restart it.
+# RLock (not Lock): _ensure_peter_worker() holds this lock while calling
+# _worker_running(), which acquires it again on the same thread — a plain
+# Lock would deadlock there.
 _worker_proc = None
-_worker_proc_lock = threading.Lock()
+_worker_proc_lock = threading.RLock()
 
 
 def _worker_running() -> bool:

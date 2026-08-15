@@ -8,6 +8,8 @@
 <meta name="apple-mobile-web-app-title" content="P.E.T.E.R" />
 <meta name="theme-color" content="#000000" />
 <link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icon-192.png" />
+<link rel="apple-touch-icon" href="icon-192.png" />
 <title>P.E.T.E.R.</title>
 <style>
   :root {
@@ -33,6 +35,16 @@
   .dot.talking { background:var(--blue); box-shadow:0 0 8px var(--blue); animation:blink 1.2s infinite; }
   .dot.speaking { background:var(--red); box-shadow:0 0 10px var(--red); animation:blink .8s infinite; }
   @keyframes blink { 50% { opacity:.4; } }
+
+  /* Peter's task progress bar — the track is always visible in the UI;
+     the moving fill only lights up and animates while he's thinking / running a tool */
+  .progress-wrap { position:relative; width:100%; max-width:340px; height:5px;
+    border-radius:999px; background:rgba(255,255,255,.1); overflow:hidden;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.05); }
+  .progress-wrap i { position:absolute; top:0; left:0; width:0%; height:100%;
+    border-radius:999px; background:var(--green);
+    opacity:0; transition:width .45s ease, opacity .2s; box-shadow: 0 0 8px rgba(46,204,113,.6); }
+  .progress-wrap.show i { opacity:1; }
 
   .url-slot { display:flex; gap:6px; width:100%; max-width:340px; }
   .url-slot input { flex:1; min-width:0; padding:10px 14px; border-radius:999px; border:1px solid rgba(255,255,255,.35);
@@ -93,6 +105,8 @@
   .msg .bubble { padding:6px 8px; border-radius:11px; font-size:11px; line-height:1.4; word-break:break-word; white-space:pre-wrap; }
   .msg.peter .bubble { background:rgba(230,36,41,.16); border:1px solid rgba(230,36,41,.3); }
   .msg.peter a { color:var(--blue); text-decoration:underline; }
+  .bubble.result-card { border-left:2px solid var(--green); }
+  .result-card-head { font-size:10.5px; font-weight:700; color:#fff; margin-bottom:3px; }
 
   .orb-wrap { position:relative; width:150px; height:150px; cursor:pointer; }
   .halo { position:absolute; inset:6px; border-radius:50%; z-index:0;
@@ -123,11 +137,14 @@
 <body>
 
 <div class="status"><div class="dot" id="statusDot"></div><span class="txt" id="statusText">Ready</span></div>
+<div class="progress-wrap" id="progressWrap"><i></i></div>
 
 <div class="url-slot">
   <input id="urlInput" type="url" placeholder="Paste a URL…" autocomplete="off" spellcheck="false" />
   <button class="url-clear" id="urlClear" title="Clear URL">✕</button>
 </div>
+
+<a class="spotify-btn" href="/designs" target="_blank" rel="noopener" style="text-decoration:none;">🛠 <span>My Designs</span></a>
 
 <div class="spotify-btn" id="spotifyBtn">🎧 <span id="spotifyLabel">Spotify</span></div>
 <div class="spotify-panel" id="spotifyPanel">
@@ -182,7 +199,7 @@ const $ = (id) => document.getElementById(id);
 const statusDot = $('statusDot'), statusText = $('statusText');
 const orbWrap = $('orbWrap');
 
-let room = null, micTrack = null, audioEl = null, audioCtx = null;
+let room = null, micTrack = null, audioEl = null;
 let liveKitToken = null, liveKitUrl = null, active = false;
 
 function setStatus(kind, text) {
@@ -205,15 +222,20 @@ async function loadConnectionInfo() {
   } catch (e) { console.error(e); setStatus('', 'Backend offline'); return false; }
 }
 
+let connecting = false;
 async function toggleCall() {
+  if (connecting) return; // ignore double-taps while a connect attempt is in flight
   if (active) { await endCall(); return; }
   if (!liveKitToken && !(await loadConnectionInfo())) return;
+  connecting = true;
   setOrbState('interacting'); $('tapHint').textContent = 'Connecting…';
   try {
     room = new LivekitClient.Room();
     room.on(LivekitClient.RoomEvent.TrackSubscribed, onTrackSubscribed);
     room.on(LivekitClient.RoomEvent.DataReceived, handleDataReceived);
     room.on(LivekitClient.RoomEvent.MediaDevicesError, (e) => console.error('media error', e));
+    room.on(LivekitClient.RoomEvent.Disconnected, onRoomDisconnected);
+    room.on(LivekitClient.RoomEvent.AudioPlaybackStatusChanged, onAudioPlaybackStatusChanged);
     await room.connect(liveKitUrl, liveKitToken, { autoSubscribe: true });
     micTrack = await LivekitClient.createLocalAudioTrack();
     await room.localParticipant.publishTrack(micTrack);
@@ -223,21 +245,56 @@ async function toggleCall() {
     active = true; setOrbState('listening'); $('tapHint').textContent = 'Tap to end';
   } catch (e) {
     console.error(e); setStatus('', 'Could not reach Peter'); $('tapHint').textContent = 'Tap to talk';
-    setOrbState(null); await cleanupRoom();
+    setOrbState(null); showProgress(false); await cleanupRoom();
+  } finally {
+    connecting = false;
   }
+}
+
+// If the room drops unexpectedly (network blip, agent crash, server kick),
+// don't leave the UI stuck showing "listening" for a call that's actually
+// dead — reset everything back to the idle "tap to talk" state.
+function onRoomDisconnected() {
+  if (!active) return;
+  active = false;
+  setOrbState(null);
+  showProgress(false);
+  $('tapHint').textContent = 'Tap to talk';
+  setStatus('', 'Disconnected — tap to reconnect');
+  room = null; micTrack = null;
+  if (audioEl) { audioEl.remove(); audioEl = null; }
 }
 
 function onTrackSubscribed(track, publication, participant) {
   if (track.kind !== 'audio') return;
   try {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const src = audioCtx.createMediaStreamSource(new MediaStream([track.mediaStreamTrack]));
-    src.connect(audioCtx.destination);
+    // track.attach() is LiveKit's own managed playback path — it creates and
+    // plays an <audio> element AND wires up the AudioPlaybackFailed/Started
+    // tracking that drives canPlaybackAudio below. A second, hand-rolled
+    // AudioContext->destination graph used to run alongside this, adding no
+    // benefit and (since it wasn't guarded like audioEl is) re-connecting a
+    // fresh source node on every TrackSubscribed firing.
     if (!audioEl) { audioEl = track.attach(); audioEl.autoplay = true; document.body.appendChild(audioEl); }
     setOrbState('speaking');
     track.on(LivekitClient.TrackEvent.Ended, () => { if (active) setOrbState('listening'); });
   } catch (e) { console.error('failed to play agent audio', e); }
 }
+
+// Mobile browsers are especially strict about autoplay — this is exactly the
+// "it says speaking but no sound" symptom. LiveKit detects it via
+// canPlaybackAudio; the fix is a real user gesture calling room.startAudio(),
+// so the next tap anywhere retries it.
+function onAudioPlaybackStatusChanged() {
+  if (!room || room.canPlaybackAudio) return;
+  console.warn('Audio playback blocked by the browser — waiting for a tap to unlock it.');
+  $('tapHint').textContent = 'Tap anywhere for sound';
+}
+document.addEventListener('click', () => {
+  if (!room || room.canPlaybackAudio) return;
+  room.startAudio().then(() => {
+    if (active) $('tapHint').textContent = 'Tap to end';
+  }).catch((e) => console.error('startAudio retry failed', e));
+});
 
 function waitForAgent(timeoutMs) {
   return new Promise((resolve, reject) => {
@@ -266,7 +323,11 @@ async function cleanupRoom() {
   } catch (e) { console.error(e); }
 }
 async function endCall() {
-  await cleanupRoom(); active = false; setOrbState(null);
+  // Flip `active` off first so the Disconnected event fired by
+  // room.disconnect() below sees onRoomDisconnected's guard and skips its
+  // redundant reset — this function already does the same work.
+  active = false;
+  await cleanupRoom(); setOrbState(null); showProgress(false);
   $('tapHint').textContent = 'Tap to talk'; setStatus('online', 'Tap to talk');
 }
 
@@ -428,8 +489,9 @@ filesSet.addEventListener('click', async () => {
 });
 
 /* Chat transcript (Peter's spoken replies) */
-const chatLog = $('chatLog'), chatEmpty = $('chatEmpty');
-function escapeHtml(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '<').replace(/>/g, '>').replace(/"/g, '"'); }
+const chatLog = $('chatLog');
+let chatEmpty = $('chatEmpty');
+function escapeHtml(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 function linkify(text) {
   return escapeHtml(text).replace(/((?:https?:\/\/|www\.)[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
 }
@@ -444,10 +506,83 @@ function appendMsg(text) {
   chatLog.appendChild(wrap);
   chatLog.scrollTop = chatLog.scrollHeight;
 }
+const progressWrap = $('progressWrap');
+const progressFill = progressWrap.querySelector('i');
+let progressWatchdog = null, progressHideTimer = null, progressPct = 0, toolStepsThisTurn = 0;
+function setProgressPct(pct) {
+  progressPct = Math.max(0, Math.min(100, pct));
+  progressFill.style.width = progressPct + '%';
+}
+// Real, event-driven progress (not a fake indeterminate loop): each stage of
+// Peter's work — thinking, each tool call, each tool finishing, speaking the
+// answer — pushes the green bar forward, so it actually reflects how far
+// along the current task is.
+function showProgress(on, pct) {
+  progressWrap.classList.toggle('show', !!on);
+  clearTimeout(progressWatchdog);
+  clearTimeout(progressHideTimer);
+  if (on) {
+    if (typeof pct === 'number') setProgressPct(pct);
+    // Safety net: if we never hear a follow-up status update (dropped
+    // message, tool error swallowed upstream, etc.) the bar shouldn't spin
+    // forever — clear it after a generous timeout so the UI never looks stuck.
+    progressWatchdog = setTimeout(() => { progressWrap.classList.remove('show'); setProgressPct(0); }, 25000);
+  } else {
+    progressHideTimer = setTimeout(() => setProgressPct(0), 220);
+  }
+}
+function handlePeterStatus(msg) {
+  const state = msg.state;
+  if (state === 'thinking') {
+    toolStepsThisTurn = 0;
+    showProgress(true, 20);
+    setStatus('talking', 'Peter is thinking…');
+  } else if (state === 'tool') {
+    toolStepsThisTurn += 1;
+    showProgress(true, Math.min(85, 40 + toolStepsThisTurn * 15));
+    setStatus('talking', msg.label || 'Working…');
+  } else if (state === 'tool_done') {
+    setProgressPct(Math.min(92, progressPct + 5));
+  } else if (state === 'speaking') {
+    showProgress(true, 100);
+    setStatus('speaking', 'Peter is speaking');
+    progressHideTimer = setTimeout(() => showProgress(false), 500);
+  } else if (state === 'listening') {
+    showProgress(false);
+    setStatus('talking', 'Peter is listening');
+  } else {
+    showProgress(false);
+  }
+}
+/* Result cards — written directly into the chat by Peter's show_in_chat tool */
+function appendResultCard(d) {
+  if (chatEmpty) chatEmpty.remove(); chatEmpty = null;
+  const wrap = document.createElement('div'); wrap.className = 'msg peter';
+  const whoEl = document.createElement('div'); whoEl.className = 'who'; whoEl.textContent = 'PETER';
+  const bubble = document.createElement('div'); bubble.className = 'bubble result-card';
+  if (d.title) {
+    const head = document.createElement('div'); head.className = 'result-card-head'; head.textContent = d.title;
+    bubble.appendChild(head);
+  }
+  const body = document.createElement('div'); body.innerHTML = linkify(d.text || '');
+  bubble.appendChild(body);
+  wrap.appendChild(whoEl); wrap.appendChild(bubble);
+  chatLog.appendChild(wrap);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+function handlePeterFiles(msg) {
+  if (msg.type === 'chat_message') appendResultCard(msg);
+}
 function handleDataReceived(payload, participant, kind, topic) {
-  if (kind !== 'reliable') return;
+  // kind is livekit-client's DataPacket_Kind enum — a NUMBER (RELIABLE=0,
+  // LOSSY=1), never the string 'reliable'. Comparing against the string
+  // silently dropped every single data-channel message (chat, status bar,
+  // file cards) since agent.py always publishes reliable=True.
+  if (kind !== LivekitClient.DataPacket_Kind.RELIABLE) return;
   try {
     const msg = JSON.parse(new TextDecoder().decode(payload));
+    if (topic === 'peter-status' && msg && msg.state) { handlePeterStatus(msg); return; }
+    if (topic === 'peter-files' && msg && msg.type) { handlePeterFiles(msg); return; }
     if (msg && msg.transcriptions && Array.isArray(msg.transcriptions)) {
       for (const t of msg.transcriptions) {
         if (!t || !t.text) continue;

@@ -7,8 +7,18 @@ Tools for the Peter AI assistant.
 - fact_check        — cross-reference web + news to verify a claim
 - store_memory      — save facts/preferences to long-term memory (Mem0)
 - retrieve_memory   — recall what Peter has been told across sessions (Mem0)
+- recall_knowledge  — recall what Peter has already learned from PAST
+                       searches (Mem0, separate namespace from personal facts)
+
+Every search_web / search_recent_news / fact_check call also quietly stores a
+distilled copy of what it found into the same Mem0-backed store under a
+"peter_knowledge" namespace (see _store_search_knowledge below), so Peter
+builds up real, persistent knowledge from his own research over time instead
+of re-searching the same ground. See learning.py for the companion piece —
+automatic reflection on conversations themselves.
 """
 
+import asyncio
 import logging
 import os
 import re
@@ -130,6 +140,74 @@ async def retrieve_memory(
     except Exception as e:
         logging.error(f"retrieve_memory error: {e}")
         return f"I couldn't recall that: {e}"
+
+
+# ──────────────────────────────────────────────────────────────
+# Learned knowledge (Mem0, separate "peter_knowledge" namespace) —
+# what Peter has picked up from his own searches, distinct from personal
+# facts about the user stored via store_memory above.
+# ──────────────────────────────────────────────────────────────
+_KNOWLEDGE_USER_ID = "peter_knowledge"
+
+
+async def _store_search_knowledge(query: str, result: str) -> None:
+    """
+    Best-effort: remember what a search turned up so Peter can recall it
+    later via recall_knowledge instead of re-searching from scratch.
+
+    Fire-and-forget (called via asyncio.create_task) so it never adds
+    latency to the tool call the user is actually waiting on, and any
+    failure here is swallowed — this must never break a live answer.
+    """
+    if _memory is None or not result:
+        return
+    snippet = result[:800]
+    try:
+        await asyncio.to_thread(
+            _memory.add,
+            f"Q: {query}\nLearned: {snippet}",
+            user_id=_KNOWLEDGE_USER_ID,
+            infer=False,
+        )
+        logging.info(f"Learned from search: '{query}'")
+    except Exception as e:
+        logging.warning(f"Failed to store search knowledge for '{query}': {e}")
+
+
+@function_tool()
+async def recall_knowledge(
+    context: RunContext,  # type: ignore
+    query: str) -> str:
+    """
+    Check what Peter has already learned from PAST searches on this topic —
+    before spending a fresh web search.
+
+    Use this FIRST for general-knowledge questions that aren't time-sensitive
+    (e.g. "how does X work", "what do you know about Y", "have you looked
+    into this before"). If it comes back empty, or the question depends on
+    freshness (news, prices, scores, schedules, anything that changes), fall
+    back to search_web / search_recent_news / fact_check as normal — never
+    treat old learned knowledge as current for anything time-sensitive.
+    """
+    if _memory is None:
+        return "I don't have access to my learned knowledge this session."
+    try:
+        results = await asyncio.to_thread(
+            _memory.search, query, filters={"user_id": _KNOWLEDGE_USER_ID}
+        )
+        items = results.get("results", []) if isinstance(results, dict) else results or []
+        if not items:
+            return "I haven't learned anything about that from past searches — I should search fresh."
+        texts = []
+        for item in items[:5]:
+            if isinstance(item, dict):
+                texts.append(str(item.get("memory", item.get("text", ""))))
+            else:
+                texts.append(str(item))
+        return "From past searches, here's what I already learned:\n" + "\n---\n".join(texts)
+    except Exception as e:
+        logging.error(f"recall_knowledge error: {e}")
+        return f"I couldn't check my learned knowledge: {e}"
 
 
 @function_tool()
@@ -267,6 +345,95 @@ def _extract_page_text(url: str, max_chars: int = 3000) -> str:
         return ""
 
 
+# ──────────────────────────────────────────────────────────────
+# Search-result links — surfaced as real clickable links in the desktop
+# chat (see agent.py's _broadcast_search_links), since Peter is a VOICE
+# assistant and never reads full URLs out loud. Each search tool stashes
+# the links it found here, keyed by call_id (available via
+# context.function_call.call_id), and agent.py pops them once the tool
+# call ends and broadcasts them over the LiveKit data channel.
+# ──────────────────────────────────────────────────────────────
+_pending_links: dict[str, list] = {}
+
+_LINK_PATTERNS = [
+    # search_web / fact_check "N. Title — https://..." result lines
+    re.compile(r"^\s*\d+\.\s+(?P<title>.+?)\s+—\s+(?P<url>https?://\S+)\s*$", re.MULTILINE),
+    # search_recent_news / fact_check "<date> — Title (https://...)" lines
+    re.compile(r"^.+?\s+—\s+(?P<title>.+?)\s+\((?P<url>https?://[^)\s]+)\)\s*$", re.MULTILINE),
+]
+
+
+def extract_links(text: str, max_links: int = 6) -> list:
+    """Pull {title, url} pairs out of a search tool's plain-text result."""
+    links: list = []
+    seen: set = set()
+    for pattern in _LINK_PATTERNS:
+        for m in pattern.finditer(text or ""):
+            if len(links) >= max_links:
+                return links
+            url = m.group("url").rstrip(".,;:)")
+            if url in seen:
+                continue
+            seen.add(url)
+            links.append({"title": m.group("title").strip()[:120], "url": url})
+    return links
+
+
+def _stash_links(context, result: str) -> None:
+    """Best-effort: remember the links a search found, keyed by call_id."""
+    try:
+        call_id = context.function_call.call_id
+    except Exception:
+        return
+    links = extract_links(result)
+    if links:
+        _pending_links[call_id] = links
+
+
+def pop_pending_links(call_id: str) -> list:
+    """Retrieve (and clear) the links stashed for a finished tool call."""
+    return _pending_links.pop(call_id, [])
+
+
+# ──────────────────────────────────────────────────────────────
+# Chat cards — lets Peter WRITE a result straight into the UI's chat log,
+# not just say it out loud (see agent.py's _broadcast_chat_message). Same
+# stash-by-call_id / pop-on-tool-end pattern as the search links above.
+# ──────────────────────────────────────────────────────────────
+_pending_chat_messages: dict[str, dict] = {}
+
+
+def pop_pending_chat_message(call_id: str):
+    """Retrieve (and clear) the chat card stashed for a finished tool call."""
+    return _pending_chat_messages.pop(call_id, None)
+
+
+@function_tool()
+async def show_in_chat(
+    context: RunContext,  # type: ignore
+    text: str,
+    title: str = "") -> str:
+    """
+    Write text directly into the chat log in Peter's UI, as a message from
+    you — in addition to (or instead of) saying it out loud.
+
+    Use this for anything better read than heard: a longer summary, a list,
+    step-by-step instructions, code, or structured results where reading the
+    whole thing aloud would be tedious. Keep what you SAY brief (e.g. "I've
+    put the details in the chat for you") and put the full content here.
+    """
+    text = (text or "").strip()
+    if not text:
+        return "Nothing to show — text was empty."
+    try:
+        call_id = context.function_call.call_id
+    except Exception:
+        call_id = None
+    if call_id:
+        _pending_chat_messages[call_id] = {"title": (title or "").strip(), "text": text}
+    return "Shown in chat."
+
+
 @function_tool()
 async def search_web(
     context: RunContext,  # type: ignore
@@ -311,6 +478,8 @@ async def search_web(
         return f"I couldn't find reliable results for '{query}'."
     result = "\n\n".join(out)
     logging.info(f"search_web '{query}' -> {len(result)} chars")
+    asyncio.create_task(_store_search_knowledge(query, result))
+    _stash_links(context, result)
     return result
 
 
@@ -362,6 +531,8 @@ async def search_recent_news(
         return f"I couldn't find recent news about '{query}'."
     result = "\n".join(items)
     logging.info(f"search_recent_news '{query}' -> {len(items)} items")
+    asyncio.create_task(_store_search_knowledge(query, result))
+    _stash_links(context, result)
     return result
 
 
@@ -398,7 +569,10 @@ async def fact_check(
             f"I couldn't corroborate the claim '{claim}' across sources. "
             "I should hedge my answer and note it's unverified."
         )
-    return "\n\n".join(out)
+    result = "\n\n".join(out)
+    asyncio.create_task(_store_search_knowledge(claim, result))
+    _stash_links(context, result)
+    return result
 
 
 @function_tool()
