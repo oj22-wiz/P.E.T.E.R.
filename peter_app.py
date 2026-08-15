@@ -323,6 +323,45 @@ class PeterApi:
             print(f"spotify_set_default_playlist error: {e}")
             return {"ok": False, "error": str(e)}
 
+    # ── Agenda / calendar (the desktop app's own Agenda panel) ──
+    def calendar_get_month(self, year: int, month: int) -> dict:
+        """Return all events in a given calendar month, for grid rendering."""
+        import calendar_store
+        try:
+            events = calendar_store.list_events_for_month(int(year), int(month))
+            return {"ok": True, "events": events}
+        except Exception as e:  # noqa: BLE001
+            print(f"calendar_get_month error: {e}")
+            return {"ok": False, "events": [], "error": str(e)}
+
+    def calendar_list_events(self, date: str = "") -> dict:
+        """Return events, optionally filtered to one date (YYYY-MM-DD)."""
+        import calendar_store
+        try:
+            return {"ok": True, "events": calendar_store.list_events(date or "")}
+        except Exception as e:  # noqa: BLE001
+            print(f"calendar_list_events error: {e}")
+            return {"ok": False, "events": [], "error": str(e)}
+
+    def calendar_add_event(self, date: str, time: str, name: str, color: str) -> dict:
+        """Add an event from the Agenda panel's own add form."""
+        import calendar_store
+        try:
+            return calendar_store.add_event(date, time, name, color)
+        except Exception as e:  # noqa: BLE001
+            print(f"calendar_add_event error: {e}")
+            return {"ok": False, "error": str(e)}
+
+    def calendar_remove_event(self, event_id: str) -> dict:
+        """Delete an event from the Agenda panel by its id."""
+        import calendar_store
+        try:
+            ok = calendar_store.remove_event(event_id)
+            return {"ok": ok}
+        except Exception as e:  # noqa: BLE001
+            print(f"calendar_remove_event error: {e}")
+            return {"ok": False, "error": str(e)}
+
     def client_log(self, message: str) -> dict:
         """Append a message from peter_ui.html's JS to ui_debug.log.
 

@@ -63,6 +63,12 @@ from spotify_tools import (
     play_my_music,
     play_playlist,
 )
+from calendar_tools import (
+    add_calendar_event,
+    list_calendar_events,
+    pop_pending_calendar_update,
+    remove_calendar_event,
+)
 from self_tools import (
     close_everything,
     list_own_files,
@@ -113,6 +119,9 @@ TOOL_LABELS = {
     "list_cad_designs": "Checking my designs",
     "show_in_chat": "Writing that in chat",
     "close_everything": "Wrapping up for today",
+    "add_calendar_event": "Adding that to your calendar",
+    "list_calendar_events": "Checking your calendar",
+    "remove_calendar_event": "Removing that from your calendar",
 }
 
 
@@ -179,6 +188,9 @@ class PeterAgent(Agent):
                 list_cad_designs,
                 show_in_chat,
                 close_everything,
+                add_calendar_event,
+                list_calendar_events,
+                remove_calendar_event,
             ],
             # Gemini Realtime — end-to-end speech model
             # Voice options (male): Charon, Fenrir, Orus, Puck
@@ -368,6 +380,15 @@ async def entrypoint(ctx: JobContext) -> None:
                 "peter-files",
             )
 
+    def _broadcast_calendar_update() -> None:
+        """Tell the desktop UI the agenda changed so an open panel refreshes.
+
+        The event itself already lives in agenda.json (calendar_store.py) by
+        the time this fires — this is just a nudge so peter_ui.html's Agenda
+        panel, if open, re-fetches instead of only refreshing on next open.
+        """
+        _broadcast({"type": "calendar_updated"}, "peter-files")
+
     @session.on("agent_state_changed")
     def _on_agent_state_changed(ev) -> None:
         _broadcast_status({"state": ev.new_state})
@@ -401,6 +422,9 @@ async def entrypoint(ctx: JobContext) -> None:
             elif name == "close_everything":
                 if update.status == "done" and pop_pending_close_signal(update.call_id):
                     _broadcast_close_app()
+            elif name in ("add_calendar_event", "remove_calendar_event"):
+                if update.status == "done" and pop_pending_calendar_update(update.call_id):
+                    _broadcast_calendar_update()
 
     # NOTE: Intentionally NO `session.generate_reply(...)` here.
     #

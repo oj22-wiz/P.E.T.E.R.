@@ -6,6 +6,7 @@ spotify_token.json
 active_file.json
 spotify_default_playlist.json
 pending_url.txt
+agenda.json
 
 # Python
 __pycache__/

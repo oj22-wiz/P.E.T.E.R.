@@ -84,6 +84,7 @@ _HERE = Path(os.path.dirname(os.path.abspath(__file__)))
 # fixes autostart (and every other launch method) regardless of CWD.
 load_dotenv(_HERE / ".env")
 
+import calendar_store
 import file_storage
 import pending
 import spotify_auth
@@ -349,6 +350,47 @@ async def files_set_active(request: Request) -> dict:
     filename = (body.get("filename") or "").strip()
     ok = file_storage.set_active_file(filename)
     return {"ok": ok, "active": filename if ok else ""}
+
+
+# ──────────────────────────────────────────────────────────────
+# Agenda / calendar — mirrors peter_app.py's PeterApi.calendar_* bridge
+# methods, but as REST endpoints since the phone has no Python bridge. Both
+# sides (this server and the agent worker's calendar_tools.py) share the
+# same agenda.json via calendar_store.py, so an event added by voice shows
+# up here immediately and vice versa.
+# ──────────────────────────────────────────────────────────────
+@app.get("/calendar/month")
+def calendar_month(year: int, month: int) -> dict:
+    try:
+        return {"ok": True, "events": calendar_store.list_events_for_month(year, month)}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "events": [], "error": str(e)}
+
+
+@app.get("/calendar/events")
+def calendar_events(date: str = "") -> dict:
+    try:
+        return {"ok": True, "events": calendar_store.list_events(date)}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "events": [], "error": str(e)}
+
+
+@app.post("/calendar/add")
+async def calendar_add(request: Request) -> dict:
+    body = await request.json()
+    date = (body.get("date") or "").strip()
+    time = (body.get("time") or "").strip()
+    name = (body.get("name") or "").strip()
+    color = (body.get("color") or "").strip()
+    return calendar_store.add_event(date, time, name, color)
+
+
+@app.post("/calendar/remove")
+async def calendar_remove(request: Request) -> dict:
+    body = await request.json()
+    event_id = (body.get("id") or "").strip()
+    ok = calendar_store.remove_event(event_id)
+    return {"ok": ok}
 
 
 # ──────────────────────────────────────────────────────────────

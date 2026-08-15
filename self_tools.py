@@ -36,6 +36,7 @@ _DENY_DIRS = {
 _DENY_FILES = {
     ".env", ".env.example", "spotify_token.json", "active_file.json",
     "spotify_default_playlist.json", "pending_url.txt", ".peter_worker.lock",
+    "agenda.json",
 }
 
 # Only these extensions count as "source" Peter can read/edit — keeps him

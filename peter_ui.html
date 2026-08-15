@@ -8,6 +8,7 @@
     --red: #e62429;
     --blue: #3d7bfd;
     --green: #2ecc71;
+    --yellow: #f1c40f;
     --txt: #ffffff;
     --dim: #b8c4e0;
     --panel: rgba(20, 28, 52, .92);
@@ -249,6 +250,82 @@
     display: block; word-break: break-word; }
   .link-item:hover { color: #fff; }
 
+  /* ── Agenda (calendar) panel ── */
+  .agenda-btn.has-events { border-color: var(--blue); }
+  .agenda-overlay {
+    position: absolute; inset: 0; z-index: 9;
+    background: rgba(0,0,0,.92);
+    display: flex; align-items: flex-start; justify-content: center;
+    padding: 34px 10px 10px;
+  }
+  .agenda-overlay[hidden] { display: none; }
+  .agenda-panel {
+    width: 100%; max-width: var(--col);
+    max-height: calc(100% - 10px); overflow-y: auto;
+    background: var(--glass-hi); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 10px; display: flex; flex-direction: column; gap: 8px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.6);
+  }
+  .agenda-panel::-webkit-scrollbar { width: 5px; }
+  .agenda-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 999px; }
+  .ag-head { display: flex; align-items: center; gap: 6px; }
+  .ag-title { flex: 1; text-align: center; font-size: 13px; font-weight: 700; }
+  .ag-nav, .ag-close {
+    flex: none; cursor: pointer; border-radius: 50%; border: 1px solid var(--line);
+    background: var(--panel); color: #fff; display: flex; align-items: center; justify-content: center;
+    transition: border-color .2s, background .2s;
+  }
+  .ag-nav { width: 26px; height: 26px; font-size: 15px; }
+  .ag-nav:hover { border-color: var(--blue); background: rgba(61,123,253,.25); }
+  .ag-close { width: 22px; height: 22px; font-size: 10px; background: rgba(230,36,41,.15); }
+  .ag-close:hover { border-color: var(--red); background: rgba(230,36,41,.4); }
+  .ag-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); font-size: 9px; color: var(--dim); text-align: center; padding: 2px 0; }
+  .ag-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+  .ag-cell {
+    aspect-ratio: 1; border-radius: 8px; border: 1px solid transparent; background: rgba(255,255,255,.04);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-size: 10.5px; color: #fff; cursor: pointer; gap: 2px; transition: border-color .15s, background .15s;
+  }
+  .ag-cell.empty { visibility: hidden; cursor: default; }
+  .ag-cell:hover { border-color: var(--blue); background: rgba(61,123,253,.15); }
+  .ag-cell.today { border-color: var(--green); }
+  .ag-cell.selected { background: rgba(61,123,253,.35); border-color: var(--blue); }
+  .ag-dots { display: flex; gap: 2px; }
+  .ag-dot { width: 5px; height: 5px; border-radius: 50%; }
+  .ag-dot.red { background: var(--red); } .ag-dot.green { background: var(--green); }
+  .ag-dot.blue { background: var(--blue); } .ag-dot.yellow { background: var(--yellow); }
+  .ag-day-panel { border-top: 1px solid var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+  .ag-day-head { font-size: 11px; font-weight: 600; color: #fff; }
+  .ag-day-events { display: flex; flex-direction: column; gap: 5px; }
+  .ag-day-empty { font-size: 10px; color: var(--dim); }
+  .ag-event-item { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 8px; background: rgba(255,255,255,.05); font-size: 10.5px; }
+  .ag-event-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .ag-event-dot.red { background: var(--red); } .ag-event-dot.green { background: var(--green); }
+  .ag-event-dot.blue { background: var(--blue); } .ag-event-dot.yellow { background: var(--yellow); }
+  .ag-event-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ag-event-time { color: var(--dim); font-size: 9.5px; }
+  .ag-event-del { cursor: pointer; color: var(--dim); font-size: 11px; padding: 2px 5px; }
+  .ag-event-del:hover { color: var(--red); }
+  .ag-add-form { display: flex; flex-direction: column; gap: 6px; }
+  .ag-add-form input[type="text"], .ag-add-form input[type="time"] {
+    padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: #0a1128;
+    color: #fff; font-size: 10.5px; outline: none;
+  }
+  .ag-add-form input[type="text"] { width: 100%; }
+  .ag-add-row { display: flex; gap: 8px; align-items: center; }
+  .ag-add-row input[type="time"] { flex: 1; min-width: 0; }
+  .ag-colors { display: flex; gap: 6px; }
+  .ag-swatch { width: 20px; height: 20px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
+  .ag-swatch.red { background: var(--red); } .ag-swatch.green { background: var(--green); }
+  .ag-swatch.blue { background: var(--blue); } .ag-swatch.yellow { background: var(--yellow); }
+  .ag-swatch.selected { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,.35); }
+  .ag-add-btn {
+    padding: 7px; border-radius: 8px; border: 1px solid rgba(46,204,113,.5);
+    background: rgba(46,204,113,.15); color: #fff; font-size: 10.5px; cursor: pointer;
+    transition: background .2s;
+  }
+  .ag-add-btn:hover { background: rgba(46,204,113,.3); }
+
   /* ── Window controls ── */
   .win-controls { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; padding: 6px 8px; z-index: 10; pointer-events: none; }
   .win-controls button { pointer-events: auto; cursor: pointer; width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(255,255,255,.25); background: rgba(10,16,34,.6); color: #fff; font-size: 13px; font-weight: 700; line-height: 1; display: flex; align-items: center; justify-content: center; transition: background .2s, border-color .2s, transform .1s; }
@@ -287,6 +364,42 @@
         <div class="pop-head" id="spotifyHead">Loading…</div>
         <select id="spotifyPlaylist" hidden></select>
         <div class="pop-note" id="spotifyNote"></div>
+      </div>
+    </div>
+  </div>
+  <div class="row">
+    <button class="row-action agenda-btn" id="agendaBtn" title="Open your agenda">
+      <span>📅</span><span>Agenda</span>
+    </button>
+  </div>
+</div>
+
+<!-- Agenda (calendar) panel — a small window Peter and the user can both use -->
+<div class="agenda-overlay" id="agendaOverlay" hidden>
+  <div class="agenda-panel">
+    <div class="ag-head">
+      <button class="ag-nav" id="agPrev" title="Previous month">&lsaquo;</button>
+      <div class="ag-title" id="agTitle">—</div>
+      <button class="ag-nav" id="agNext" title="Next month">&rsaquo;</button>
+      <button class="ag-close" id="agClose" title="Close agenda">&#10005;</button>
+    </div>
+    <div class="ag-weekdays"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span></div>
+    <div class="ag-grid" id="agGrid"></div>
+    <div class="ag-day-panel">
+      <div class="ag-day-head" id="agDayHead">Select a date</div>
+      <div class="ag-day-events" id="agDayEvents"></div>
+      <div class="ag-add-form">
+        <input type="text" id="agName" placeholder="Event name" maxlength="120" autocomplete="off" spellcheck="false" />
+        <div class="ag-add-row">
+          <input type="time" id="agTime" />
+          <div class="ag-colors" id="agColors">
+            <button class="ag-swatch red" data-color="red" title="Red"></button>
+            <button class="ag-swatch green" data-color="green" title="Green"></button>
+            <button class="ag-swatch blue" data-color="blue" title="Blue"></button>
+            <button class="ag-swatch yellow" data-color="yellow" title="Yellow"></button>
+          </div>
+        </div>
+        <button class="ag-add-btn" id="agAddBtn">+ Add event</button>
       </div>
     </div>
   </div>
@@ -417,6 +530,11 @@ async function toggleCall() {
     $('tapHint').textContent = 'Tap to end';
   } catch (e) {
     console.error(e);
+    // Devtools are disabled in the packaged app, so console.error alone is
+    // invisible — without this, a failed connect attempt leaves no trace
+    // anywhere, which is exactly what made a run of silent failures here
+    // look like "Peter isn't hearing me" with zero diagnostic evidence.
+    clientLog('toggleCall failed: ' + (e && (e.stack || e.message) || e));
     setStatus('', 'Could not reach Peter');
     $('tapHint').textContent = 'Clap or tap to talk';
     setOrbState(null);
@@ -497,8 +615,17 @@ const NOISE_FLOOR_ALPHA = 0.03;    // how fast the ambient-floor estimate adapts
 const CLAP_COOLDOWN_MS = 200;      // ignore further spikes this long after one clap (its own decay/echo)
 const CLAP_PAIR_WINDOW_MS = 1200;  // two claps must land within this long of each other
 const CLAP_POLL_MS = 25;           // analysis tick rate — shorter than the analyser window below, so no gaps
+const CLAP_WARMUP_MS = 500;        // ignore samples right after the stream opens — a fresh getUserMedia
+                                    // stream/AudioContext commonly emits a loud startup pop/click as the
+                                    // hardware settles, which a peak detector reads as an instant "clap".
+                                    // Without this, that single pop can look like BOTH claps of a pair
+                                    // (they land in the same ~25ms tick window), auto-triggering a connect
+                                    // attempt the instant the listener starts — and if that attempt then
+                                    // fails, stopClapListener()/startClapListener() cycles again, producing
+                                    // the pop again, in an unintended reconnect loop that looks like Peter
+                                    // never hears anything.
 let clapStream = null, clapCtx = null, clapAnalyser = null, clapInterval = null;
-let clapTimes = [], lastClapAt = 0, noiseFloor = 0.01;
+let clapTimes = [], lastClapAt = 0, noiseFloor = 0.01, clapListenerStartedAt = 0;
 let clapRetryTimer = null, clapRetryDelay = 1500, lastDiagLogAt = 0;
 
 function clientLog(msg) {
@@ -523,6 +650,7 @@ async function startClapListener() {
     source.connect(clapAnalyser);
     const data = new Float32Array(clapAnalyser.fftSize);
     clapRetryDelay = 1500; // reset backoff after a clean start
+    clapListenerStartedAt = Date.now();
     clientLog('clap listener: mic acquired, listening for claps');
     clapInterval = setInterval(() => {
       if (!clapAnalyser || !clapCtx) return;
@@ -537,6 +665,7 @@ async function startClapListener() {
       let peak = 0;
       for (let i = 0; i < data.length; i++) { const v = Math.abs(data[i]); if (v > peak) peak = v; }
       const now = Date.now();
+      if (now - clapListenerStartedAt < CLAP_WARMUP_MS) return; // ride out the stream's startup pop
       const coolingDown = now - lastClapAt < CLAP_COOLDOWN_MS;
       const dynamicThreshold = Math.max(CLAP_MIN_PEAK, noiseFloor * CLAP_RATIO);
       // Periodic proof-of-life: confirms real mic signal is flowing (not
@@ -746,6 +875,116 @@ async function openSpotifyPanel() {
     if (sel && t) t.textContent = 'Tap "Set default →" to save: ' + sel.textContent;
   });
 }
+
+// ── Agenda (calendar) panel ──────────────────────────────────
+const agendaBtn = $('agendaBtn'), agendaOverlay = $('agendaOverlay');
+const agPrev = $('agPrev'), agNext = $('agNext'), agTitle = $('agTitle'), agGrid = $('agGrid'), agClose = $('agClose');
+const agDayHead = $('agDayHead'), agDayEvents = $('agDayEvents');
+const agName = $('agName'), agTime = $('agTime'), agColors = $('agColors'), agAddBtn = $('agAddBtn');
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+let agViewYear = 0, agViewMonth = 0, agSelectedDate = null, agSelectedColor = 'blue', agMonthEvents = [];
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+function todayStr() { const d = new Date(); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+
+function openAgenda() {
+  const now = new Date();
+  agViewYear = now.getFullYear();
+  agViewMonth = now.getMonth() + 1;
+  agSelectedDate = todayStr();
+  agendaOverlay.hidden = false;
+  renderAgendaMonth();
+}
+function closeAgenda() { agendaOverlay.hidden = true; }
+agendaBtn.addEventListener('click', (e) => { e.stopPropagation(); agendaOverlay.hidden ? openAgenda() : closeAgenda(); });
+agClose.addEventListener('click', (e) => { e.stopPropagation(); closeAgenda(); });
+agPrev.addEventListener('click', (e) => { e.stopPropagation(); agViewMonth--; if (agViewMonth < 1) { agViewMonth = 12; agViewYear--; } renderAgendaMonth(); });
+agNext.addEventListener('click', (e) => { e.stopPropagation(); agViewMonth++; if (agViewMonth > 12) { agViewMonth = 1; agViewYear++; } renderAgendaMonth(); });
+
+async function renderAgendaMonth() {
+  agTitle.textContent = MONTH_NAMES[agViewMonth - 1] + ' ' + agViewYear;
+  let res;
+  try { res = await window.pywebview.api.calendar_get_month(agViewYear, agViewMonth); }
+  catch (e) { console.error('calendar_get_month', e); res = null; }
+  agMonthEvents = (res && res.events) || [];
+
+  agGrid.innerHTML = '';
+  const firstDow = new Date(agViewYear, agViewMonth - 1, 1).getDay();
+  const daysInMonth = new Date(agViewYear, agViewMonth, 0).getDate();
+  const tStr = todayStr();
+  for (let i = 0; i < firstDow; i++) {
+    const c = document.createElement('div'); c.className = 'ag-cell empty';
+    agGrid.appendChild(c);
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = agViewYear + '-' + pad2(agViewMonth) + '-' + pad2(d);
+    const cell = document.createElement('div');
+    cell.className = 'ag-cell';
+    if (dateStr === tStr) cell.classList.add('today');
+    if (dateStr === agSelectedDate) cell.classList.add('selected');
+    const num = document.createElement('div'); num.textContent = d;
+    cell.appendChild(num);
+    const dayEvents = agMonthEvents.filter((ev) => ev.date === dateStr);
+    if (dayEvents.length) {
+      const dots = document.createElement('div'); dots.className = 'ag-dots';
+      const seen = new Set();
+      dayEvents.forEach((ev) => {
+        if (seen.has(ev.color) || seen.size >= 4) return;
+        seen.add(ev.color);
+        const dot = document.createElement('span'); dot.className = 'ag-dot ' + ev.color;
+        dots.appendChild(dot);
+      });
+      cell.appendChild(dots);
+    }
+    cell.addEventListener('click', () => { agSelectedDate = dateStr; renderAgendaMonth(); });
+    agGrid.appendChild(cell);
+  }
+  renderDayPanel();
+}
+
+function renderDayPanel() {
+  agDayHead.textContent = agSelectedDate || 'Select a date';
+  agDayEvents.innerHTML = '';
+  const dayEvents = agSelectedDate ? agMonthEvents.filter((ev) => ev.date === agSelectedDate) : [];
+  if (!dayEvents.length) {
+    const p = document.createElement('div'); p.className = 'ag-day-empty'; p.textContent = 'Nothing scheduled.';
+    agDayEvents.appendChild(p);
+  }
+  dayEvents.forEach((ev) => {
+    const item = document.createElement('div'); item.className = 'ag-event-item';
+    const dot = document.createElement('span'); dot.className = 'ag-event-dot ' + ev.color; item.appendChild(dot);
+    const name = document.createElement('span'); name.className = 'ag-event-name'; name.textContent = ev.name; item.appendChild(name);
+    if (ev.time) { const t = document.createElement('span'); t.className = 'ag-event-time'; t.textContent = ev.time; item.appendChild(t); }
+    const del = document.createElement('span'); del.className = 'ag-event-del'; del.textContent = '✕'; del.title = 'Remove';
+    del.addEventListener('click', async () => {
+      try { await window.pywebview.api.calendar_remove_event(ev.id); } catch (e) { console.error('calendar_remove_event', e); }
+      renderAgendaMonth();
+    });
+    item.appendChild(del);
+    agDayEvents.appendChild(item);
+  });
+}
+
+agColors.querySelectorAll('.ag-swatch').forEach((sw) => {
+  sw.addEventListener('click', () => {
+    agSelectedColor = sw.dataset.color;
+    agColors.querySelectorAll('.ag-swatch').forEach((s) => s.classList.remove('selected'));
+    sw.classList.add('selected');
+  });
+});
+const agDefaultSwatch = agColors.querySelector('.ag-swatch.' + agSelectedColor);
+if (agDefaultSwatch) agDefaultSwatch.classList.add('selected');
+
+agAddBtn.addEventListener('click', async () => {
+  if (!agSelectedDate) return;
+  const name = agName.value.trim();
+  if (!name) { agName.focus(); return; }
+  try {
+    const r = await window.pywebview.api.calendar_add_event(agSelectedDate, agTime.value || '', name, agSelectedColor);
+    if (r && r.ok) { agName.value = ''; agTime.value = ''; renderAgendaMonth(); }
+    else console.error('calendar_add_event failed', r);
+  } catch (e) { console.error('calendar_add_event', e); }
+});
 
 const dropZone = $('dropZone'), dzProgress = $('dzProgress'), dzBar = dzProgress.querySelector('i');
 const filesActive = $('filesActive'), activeFileName = $('activeFileName'), activeFileLabel = $('activeFileLabel');
@@ -963,6 +1202,7 @@ function handlePeterFiles(msg) {
   if (msg.type === 'cad_design') appendFileCard(msg);
   else if (msg.type === 'search_links') appendLinkList(msg.links);
   else if (msg.type === 'chat_message') appendResultCard(msg);
+  else if (msg.type === 'calendar_updated') { if (!agendaOverlay.hidden) renderAgendaMonth(); }
 }
 
 function handleDataReceived(payload, participant, kind, topic) {
