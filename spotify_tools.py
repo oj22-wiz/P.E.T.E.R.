@@ -270,12 +270,21 @@ def _play_uri(client, uri: str, context_name: str) -> str:
     waiting through the whole launch.
     """
     import threading
+
+    def _run() -> None:
+        # _do_play_uri's return value used to be discarded entirely, so
+        # whether it actually found a device (or why it didn't) was
+        # invisible anywhere — the user just heard the "On it" ack and
+        # then silence with no way to tell success from failure. Logging
+        # it here at least makes the real outcome visible in /worker-log.
+        try:
+            result = _do_play_uri(client, uri, context_name)
+            logging.info(f"play_uri background result: {result}")
+        except Exception as e:  # noqa: BLE001
+            logging.error(f"play_uri background thread crashed: {e}")
+
     try:
-        t = threading.Thread(
-            target=_do_play_uri,
-            args=(client, uri, context_name),
-            daemon=True,
-        )
+        t = threading.Thread(target=_run, daemon=True)
         t.start()
     except Exception as e:  # noqa: BLE001
         logging.error(f"Couldn't start playback thread: {e}")
