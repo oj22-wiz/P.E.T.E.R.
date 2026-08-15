@@ -230,7 +230,14 @@ async function toggleCall() {
   connecting = true;
   setOrbState('interacting'); $('tapHint').textContent = 'Connecting…';
   try {
-    room = new LivekitClient.Room();
+    // disconnectOnPageLeave defaults to true and tears down the call on
+    // 'pagehide'/'beforeunload'. Mobile Safari fires those far more often
+    // than a real "leaving the page" - screen lock, a brief app-switch, or
+    // the tab getting suspended in the background all count - so the call
+    // was dying with no action from the user. A room left behind by an
+    // actual tab close still gets cleaned up server-side by LiveKit's
+    // participant timeout, so disabling this only costs that edge case.
+    room = new LivekitClient.Room({ disconnectOnPageLeave: false });
     room.on(LivekitClient.RoomEvent.TrackSubscribed, onTrackSubscribed);
     room.on(LivekitClient.RoomEvent.DataReceived, handleDataReceived);
     room.on(LivekitClient.RoomEvent.MediaDevicesError, (e) => console.error('media error', e));
