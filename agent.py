@@ -474,6 +474,16 @@ if __name__ == "__main__":
             # room. There's only ever one user here, so we don't need the
             # OS-process isolation between jobs that PROCESS mode buys you.
             job_executor_type=JobExecutorType.THREAD,
+            # Defaults to min(ceil(cpu_count()), 4) idle warm slots in prod —
+            # each one runs _prewarm and holds its own live Gemini Realtime
+            # connection, all day, whether or not anyone's calling. cpu_count()
+            # reflects the host's total cores, not this container's actual
+            # (tiny, throttled) CPU share, so on Render's free tier this meant
+            # several idle connections quietly competing with the one real
+            # call for the same starved CPU budget — a very plausible source
+            # of the choppy audio. This only ever serves one caller, so one
+            # warm slot is enough.
+            num_idle_processes=1,
         )
     )
 
