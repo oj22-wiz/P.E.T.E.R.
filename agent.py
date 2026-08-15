@@ -235,13 +235,23 @@ async def entrypoint(ctx: JobContext) -> None:
     # do NOT set screen_enabled=True here — when Gemini Realtime has a
     # dedicated screen input it waits for a screen frame before speaking, so
     # normal voice calls would hang with no reply until a screen is shared.
+    #
+    # BVC noise cancellation runs real-time ML inference on every audio
+    # frame — fine on a desktop's own CPU, but on a small shared-CPU cloud
+    # container (Render free tier, running the web server + this worker in
+    # the same box) it was competing with the live Gemini audio stream for
+    # CPU and causing choppy/glitchy audio. PORT is only set by the cloud
+    # host (see mobile_backend.py's own cloud-mode check), so skip BVC there
+    # and keep it for local desktop calls where CPU isn't the bottleneck.
+    _in_cloud = bool(os.getenv("PORT"))
+    input_kwargs: dict = {"video_enabled": True}
+    if not _in_cloud:
+        input_kwargs["noise_cancellation"] = noise_cancellation.BVC()
+
     await session.start(
         agent=agent,
         room=ctx.room,
-        room_input_options=agents.RoomInputOptions(
-            video_enabled=True,
-            noise_cancellation=noise_cancellation.BVC(),
-        ),
+        room_input_options=agents.RoomInputOptions(**input_kwargs),
     )
 
     # ────────────────────────────────────────────────────────
