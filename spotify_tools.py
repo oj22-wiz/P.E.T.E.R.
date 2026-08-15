@@ -215,6 +215,19 @@ def _do_play_uri(client, uri: str, context_name: str) -> str:
             d = devices[0]
             return _start(d["id"], d["name"])
 
+        # No active device. "Launch the local Spotify desktop app" only makes
+        # sense on the desktop app, where this code runs on the user's own
+        # PC. In the cloud deploy this same code runs on the server
+        # container, which has no desktop and no Spotify app to launch —
+        # attempting it is a silent no-op, so skip straight to telling the
+        # user what will actually fix it (open Spotify on their phone).
+        if bool(os.getenv("PORT")):
+            return (
+                "I couldn't find an active Spotify device. Open the Spotify "
+                "app on your phone (it just needs to be running — you don't "
+                "have to be playing anything) and ask me again."
+            )
+
         # No active device — try to launch the local Spotify desktop app.
         launched = _launch_local_spotify()
         if launched:
