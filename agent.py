@@ -32,6 +32,7 @@ from livekit.agents import (
     Agent,
     AgentSession,
     JobContext,
+    JobProcess,
     RunContext,
     WorkerOptions,
     cli,
@@ -431,14 +432,27 @@ def _disable_console_quick_edit() -> None:
         pass  # best-effort — never block worker startup over this
 
 
+def _prewarm(proc: JobProcess) -> None:
+    """Prewarm the Gemini Realtime model at process startup to reduce
+    first-join latency.
+
+    Must be a real module-level function, not a lambda: the agents
+    framework spawns each job in its own subprocess (forkserver on Linux)
+    and pickles this callback to hand it to that subprocess. Lambdas have
+    no importable qualified name, so pickling one raises PicklingError and
+    every job spawn fails — the worker stays "running" but can never
+    actually join a room.
+    """
+    _build_model()
+
+
 if __name__ == "__main__":
     _disable_console_quick_edit()
     cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,
             agent_name=os.getenv("AGENT_ID", "peter-assistant"),
-            # Prewarm the faster GA model at startup to reduce first-join latency
-            prewarm_fnc=lambda proc: _build_model(),
+            prewarm_fnc=_prewarm,
         )
     )
 
