@@ -228,7 +228,8 @@ async def entrypoint(ctx: JobContext) -> None:
     # Connect to the LiveKit room
     await ctx.connect()
 
-    # Start the agent session with camera vision + noise cancellation enabled.
+    # Start the agent session with camera vision + noise cancellation enabled
+    # on desktop (both skipped in the cloud deploy — see below).
     # video_enabled=True lets the agent receive BOTH a camera feed and the
     # screen-share track published from the desktop app's "Share screen"
     # button (screen shares arrive as regular video). Note: we intentionally
@@ -244,7 +245,13 @@ async def entrypoint(ctx: JobContext) -> None:
     # host (see mobile_backend.py's own cloud-mode check), so skip BVC there
     # and keep it for local desktop calls where CPU isn't the bottleneck.
     _in_cloud = bool(os.getenv("PORT"))
-    input_kwargs: dict = {"video_enabled": True}
+    # Phone calls never publish a camera/screen-share track (the mobile PWA
+    # only ever publishes a mic), so video_enabled buys nothing there but
+    # does still set up a video consumer path in RoomIO. Keep it only where
+    # it's actually used: desktop calls, which have the camera-vision and
+    # screen-share features. Every bit of avoidable work matters on the
+    # cloud container's tiny CPU allocation.
+    input_kwargs: dict = {"video_enabled": not _in_cloud}
     if not _in_cloud:
         input_kwargs["noise_cancellation"] = noise_cancellation.BVC()
 

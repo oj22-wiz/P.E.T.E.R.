@@ -5,6 +5,18 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Numeric/audio libs (numpy's BLAS backend, etc.) auto-detect the HOST's
+# total CPU count and spawn that many worker threads for "parallelism".
+# On a small free-tier container with a throttled CPU allocation far
+# below that count, those extra threads just thrash against each other
+# for the same tiny CPU slice instead of helping — a well-known source of
+# choppiness in real-time workloads on constrained containers. Pin them
+# to 1 so nothing over-subscribes past what's actually available.
+ENV OMP_NUM_THREADS=1 \
+    OPENBLAS_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    NUMEXPR_NUM_THREADS=1
+
 # System deps: build tools + audio/runtime libs the LiveKit/Gemini stack needs.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
